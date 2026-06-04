@@ -1,0 +1,10 @@
+name,type,description
+product_name,str,The name of the product
+price,float,The price of the product in USD
+in_stock,bool,Whether the product is currently available
+category,str,The product category
+rating,float,Average customer rating out of 5
+available_sizes,list[int],Available sizes as a list of integers (e.g. waist sizes)
+tag_list,list[str],List of descriptive string tags for the product
+dimension_map,dict,A dict mapping dimension names to float values in cm
+current_year,int,The specified year in the source
