@@ -9,9 +9,9 @@ EXTRACTION_SIGNATURE_DOCSTRING = (
 
 def extraction_signature_builder(attrs: list[Attribute]) -> dspy.Signature:
     fields, annotations = fields_builder(attrs)
-    custom_signature = type("CustomSignature", (dspy.Signature,), fields)
-    custom_signature.__annotations__ = annotations
-    return custom_signature
+    return type(
+        "CustomSignature", (dspy.Signature,), {**fields, "__annotations__": annotations}
+    )
 
 
 def fields_builder(
