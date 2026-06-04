@@ -6,7 +6,5 @@ class LoadingAttributeFromCSVError(Exception):
     pass
 
 
-class CannotCreateAttributeWithDisallowedNameError(
-        Exception
-):
+class CannotCreateAttributeWithDisallowedNameError(Exception):
     pass

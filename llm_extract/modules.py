@@ -1,5 +1,6 @@
 import dspy
 
+
 class Extract(dspy.Module):
     def __init__(self, signature: dspy.Signature):
         self.signature = signature

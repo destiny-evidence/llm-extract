@@ -1,7 +1,7 @@
-from config import configure_dspy
-from loader import load_attributes_csv
-from factory import extraction_signature_builder
-from modules import Extract
+from llm_extract.config import configure_dspy
+from llm_extract.loader import load_attributes_csv
+from llm_extract.factory import extraction_signature_builder
+from llm_extract.modules import Extract
 
 
 def main():
@@ -13,6 +13,7 @@ def main():
         source = f.read()
     results = extractor(source)
     print(results)
+
 
 if __name__ == "__main__":
     main()
