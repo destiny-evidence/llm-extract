@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "llm-extract"
 version = "0.1.0"
@@ -9,7 +13,11 @@ dependencies = [
     "dotenv>=0.9.9",
     "dspy>=3.2.1",
     "pydantic>=2.13.4",
+    "typer>=0.25.1",
 ]
+
+[project.scripts]
+llm-extract = "llm_extract.cli:app"
 
 [dependency-groups]
 dev = [
