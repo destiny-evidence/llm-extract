@@ -17,3 +17,7 @@ dev = [
     "pytest>=9.0.3",
     "ruff>=0.15.15",
 ]
+
+[tool.ruff.lint]
+select = ["ANN001", "ANN201", "ANN204", "D101", "D102", "D103"]
+ignore = ["D100", "D104", "D107", "D212"]

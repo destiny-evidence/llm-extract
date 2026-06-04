@@ -39,7 +39,13 @@ def get_llm(
 
 
 @cache
-def configure_dspy(lm: Optional[dspy.LM] = None):
+def configure_dspy(lm: Optional[dspy.LM] = None) -> None:
+    """
+    Configure DSPy with the given or default language model.
+
+    :param lm: a DSPy LM instance to use; if None, creates one from environment variables
+    :return: None
+    """
     if lm is None:
         lm = get_llm()
     dspy.configure(lm=lm)

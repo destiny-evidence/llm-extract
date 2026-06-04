@@ -12,6 +12,12 @@ DISALLOWED_NAMES = {"source"}
 
 
 def load_attributes_csv(path: Path | str) -> list[Attribute]:
+    """
+    Load and parse attributes from a CSV file.
+
+    :param path: path to the CSV file with columns: name, type, description
+    :return: list of parsed Attribute objects
+    """
     path = Path(path)
     with path.open() as f:
         reader = csv.DictReader(f)

@@ -1,10 +1,10 @@
 class AttributeTypeConversionError(Exception):
-    pass
+    """Raised when a type string from the CSV cannot be converted to a Python type."""
 
 
 class LoadingAttributeFromCSVError(Exception):
-    pass
+    """Raised when the attributes CSV cannot be loaded or parsed."""
 
 
 class CannotCreateAttributeWithDisallowedNameError(Exception):
-    pass
+    """Raised when an attribute uses a reserved name."""
