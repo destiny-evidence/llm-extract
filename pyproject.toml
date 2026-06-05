@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "llm-extract"
 version = "0.1.0"
@@ -9,9 +13,22 @@ dependencies = [
     "dotenv>=0.9.9",
     "dspy>=3.2.1",
     "pydantic>=2.13.4",
+    "typer>=0.25.1",
 ]
+
+[project.scripts]
+llm-extract = "llm_extract.cli:app"
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.6.0",
+    "pytest>=9.0.3",
     "ruff>=0.15.15",
 ]
+
+[tool.ruff.lint]
+select = ["ANN001", "ANN201", "ANN204", "D101", "D102", "D103"]
+ignore = ["D100", "D104", "D107", "D212"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN001", "ANN201", "D101", "D102", "D103"]
