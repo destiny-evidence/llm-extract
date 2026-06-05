@@ -30,26 +30,23 @@ def env_file(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def mock_pipeline():
-    """Patch the full extraction pipeline so no LLM calls are made."""
-    mock_prediction = MagicMock()
-    mock_prediction.__str__ = lambda self: "Prediction(product_name='Widget')"
+    """Patch the extraction pipeline so no LLM calls are made."""
+    mock_result = MagicMock()
+    mock_result.to_csv_rows.return_value = [
+        ["name", "value"],
+        ["product_name", "Widget"],
+    ]
 
     with (
         patch("llm_extract.cli.configure_dspy") as mock_configure,
         patch("llm_extract.cli.load_attributes_csv") as mock_load,
-        patch("llm_extract.cli.extraction_signature_builder") as mock_builder,
-        patch("llm_extract.cli.Extract") as mock_extract_cls,
+        patch("llm_extract.cli.extract", return_value=mock_result) as mock_extract,
     ):
-        mock_extractor = MagicMock(return_value=mock_prediction)
-        mock_extract_cls.return_value = mock_extractor
-
         yield {
             "configure": mock_configure,
             "load": mock_load,
-            "builder": mock_builder,
-            "extract_cls": mock_extract_cls,
-            "extractor": mock_extractor,
-            "prediction": mock_prediction,
+            "extract": mock_extract,
+            "result": mock_result,
         }
 
 
@@ -61,8 +58,11 @@ def test_extract_happy_path(source_file, attrs_file, mock_pipeline) -> None:
     assert result.exit_code == 0
     mock_pipeline["configure"].assert_called_once_with(env_file=None)
     mock_pipeline["load"].assert_called_once_with(attrs_file)
-    mock_pipeline["builder"].assert_called_once()
-    mock_pipeline["extractor"].assert_called_once_with("Some product description text.")
+    mock_pipeline["extract"].assert_called_once_with(
+        "Some product description text.",
+        mock_pipeline["load"].return_value,
+        with_reasoning=False,
+    )
 
 
 def test_extract_with_env_file(
@@ -75,7 +75,7 @@ def test_extract_with_env_file(
             str(source_file),
             "--attrs",
             str(attrs_file),
-            "--env-file",
+            "--env",
             str(env_file),
         ],
     )
@@ -84,7 +84,21 @@ def test_extract_with_env_file(
     mock_pipeline["configure"].assert_called_once_with(env_file=env_file)
 
 
-def test_extract_output_contains_prediction(
+def test_extract_with_reasoning(source_file, attrs_file, mock_pipeline) -> None:
+    result = runner.invoke(
+        app,
+        ["--file", str(source_file), "--attrs", str(attrs_file), "--with-reasoning"],
+    )
+
+    assert result.exit_code == 0
+    mock_pipeline["extract"].assert_called_once_with(
+        "Some product description text.",
+        mock_pipeline["load"].return_value,
+        with_reasoning=True,
+    )
+
+
+def test_extract_calls_display_when_no_output(
     source_file, attrs_file, mock_pipeline
 ) -> None:
     result = runner.invoke(
@@ -92,7 +106,64 @@ def test_extract_output_contains_prediction(
     )
 
     assert result.exit_code == 0
-    assert "Widget" in result.output
+    mock_pipeline["result"].display.assert_called_once()
+    mock_pipeline["result"].write_csv.assert_not_called()
+
+
+def test_extract_calls_write_csv_when_output_given(
+    source_file, attrs_file, tmp_path, mock_pipeline
+) -> None:
+    output = tmp_path / "results.csv"
+    result = runner.invoke(
+        app,
+        [
+            "--file",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_pipeline["result"].write_csv.assert_called_once_with(output)
+    mock_pipeline["result"].display.assert_not_called()
+
+
+def test_extract_auto_names_file_when_output_is_directory(
+    source_file, attrs_file, tmp_path, mock_pipeline
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "--file",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    expected = tmp_path / "source-extracted.csv"
+    mock_pipeline["result"].write_csv.assert_called_once_with(expected)
+
+
+def test_extract_nonexistent_output_dir(source_file, attrs_file, tmp_path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "--file",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--output",
+            str(tmp_path / "nonexistent" / "results.csv"),
+        ],
+    )
+    assert result.exit_code != 0
 
 
 def test_extract_missing_file_option(attrs_file) -> None:
@@ -127,7 +198,7 @@ def test_extract_nonexistent_env_file(source_file, attrs_file, tmp_path) -> None
             str(source_file),
             "--attrs",
             str(attrs_file),
-            "--env-file",
+            "--env",
             str(tmp_path / "ghost.env"),
         ],
     )
