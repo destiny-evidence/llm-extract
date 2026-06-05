@@ -31,19 +31,22 @@ def env_file(tmp_path: Path) -> Path:
 @pytest.fixture
 def mock_pipeline():
     """Patch the extraction pipeline so no LLM calls are made."""
-    mock_prediction = MagicMock()
-    mock_prediction.__str__ = lambda self: "Prediction(product_name='Widget')"
+    mock_result = MagicMock()
+    mock_result.to_csv_rows.return_value = [
+        ["name", "value"],
+        ["product_name", "Widget"],
+    ]
 
     with (
         patch("llm_extract.cli.configure_dspy") as mock_configure,
         patch("llm_extract.cli.load_attributes_csv") as mock_load,
-        patch("llm_extract.cli.extract", return_value=mock_prediction) as mock_extract,
+        patch("llm_extract.cli.extract", return_value=mock_result) as mock_extract,
     ):
         yield {
             "configure": mock_configure,
             "load": mock_load,
             "extract": mock_extract,
-            "prediction": mock_prediction,
+            "result": mock_result,
         }
 
 
@@ -79,15 +82,13 @@ def test_extract_with_env_file(
     mock_pipeline["configure"].assert_called_once_with(env_file=env_file)
 
 
-def test_extract_output_contains_prediction(
-    source_file, attrs_file, mock_pipeline
-) -> None:
+def test_extract_calls_display(source_file, attrs_file, mock_pipeline) -> None:
     result = runner.invoke(
         app, ["--file", str(source_file), "--attrs", str(attrs_file)]
     )
 
     assert result.exit_code == 0
-    assert "Widget" in result.output
+    mock_pipeline["result"].display.assert_called_once()
 
 
 def test_extract_missing_file_option(attrs_file) -> None:
