@@ -28,6 +28,15 @@ def test_string_to_type_generic_list() -> None:
     assert string_to_type("list[int]") == typing.Optional[list[int]]
 
 
+def test_string_to_type_union_types_are_accepted() -> None:
+    # | passes the allowlist check (only identifiers are validated),
+    # so union types silently succeed rather than raising
+    assert string_to_type("str | int") == typing.Optional[str | int]
+    assert string_to_type("str|int") == typing.Optional[str | int]
+    assert string_to_type("int | float") == typing.Optional[int | float]
+    assert string_to_type("str | int | float") == typing.Optional[str | int | float]
+
+
 def test_string_to_type_disallowed_identifier_raises() -> None:
     with pytest.raises(ValueError, match="Disallowed types"):
         string_to_type("datetime")
