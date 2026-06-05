@@ -30,6 +30,7 @@ def extract_command(
     ),
     env_file: Optional[Path] = typer.Option(
         None,
+        "--env",
         help="Path to a .env file to load.",
         exists=True,
         file_okay=True,

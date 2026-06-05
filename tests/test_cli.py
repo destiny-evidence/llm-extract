@@ -73,7 +73,7 @@ def test_extract_with_env_file(
             str(source_file),
             "--attrs",
             str(attrs_file),
-            "--env-file",
+            "--env",
             str(env_file),
         ],
     )
@@ -182,7 +182,7 @@ def test_extract_nonexistent_env_file(source_file, attrs_file, tmp_path) -> None
             str(source_file),
             "--attrs",
             str(attrs_file),
-            "--env-file",
+            "--env",
             str(tmp_path / "ghost.env"),
         ],
     )
