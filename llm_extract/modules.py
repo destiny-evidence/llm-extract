@@ -1,7 +1,20 @@
+import csv
+import json
 import dspy
 from dataclasses import dataclass
+from pathlib import Path
 
 NOT_FOUND = "NOT_FOUND"
+
+
+def _format_value(value: object) -> object:
+    if value is None:
+        return NOT_FOUND
+    if isinstance(value, str):
+        return value.strip("\"'")
+    if isinstance(value, (list, dict)):
+        return json.dumps(value)
+    return value
 
 
 @dataclass
@@ -21,13 +34,23 @@ class ExtractionResult:
 
         for key in (k for k in self.prediction.keys() if k != "reasoning"):
             value = getattr(self.prediction, key)
-            rows.append([key, NOT_FOUND if value is None else value])
+            rows.append([key, _format_value(value)])
 
         reasoning = getattr(self.prediction, "reasoning", None)
         if reasoning is not None:
             rows.append(["_reasoning_", reasoning])
 
         return rows
+
+    def write_csv(self, path: Path) -> None:
+        """
+        Write extraction results to a CSV file.
+
+        :param path: destination file path
+        """
+        with path.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerows(self.to_csv_rows())
 
     def display(self) -> None:
         """Print extraction results as an aligned two-column table to stdout."""

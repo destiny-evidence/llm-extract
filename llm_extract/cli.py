@@ -36,9 +36,19 @@ def extract_command(
         dir_okay=False,
         readable=True,
     ),
+    output: Optional[Path] = typer.Option(
+        None,
+        help="CSV file path to write results to. If omitted, results are printed to the console.",
+        file_okay=True,
+        dir_okay=False,
+        writable=True,
+    ),
 ) -> None:
     """Extract structured attributes from a text file."""
     configure_dspy(env_file=env_file)
     attributes = load_attributes_csv(attrs)
     result = extract(file.read_text(), attributes)
-    result.display()
+    if output:
+        result.write_csv(output)
+    else:
+        result.display()

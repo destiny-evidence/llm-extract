@@ -82,13 +82,52 @@ def test_extract_with_env_file(
     mock_pipeline["configure"].assert_called_once_with(env_file=env_file)
 
 
-def test_extract_calls_display(source_file, attrs_file, mock_pipeline) -> None:
+def test_extract_calls_display_when_no_output(
+    source_file, attrs_file, mock_pipeline
+) -> None:
     result = runner.invoke(
         app, ["--file", str(source_file), "--attrs", str(attrs_file)]
     )
 
     assert result.exit_code == 0
     mock_pipeline["result"].display.assert_called_once()
+    mock_pipeline["result"].write_csv.assert_not_called()
+
+
+def test_extract_calls_write_csv_when_output_given(
+    source_file, attrs_file, tmp_path, mock_pipeline
+) -> None:
+    output = tmp_path / "results.csv"
+    result = runner.invoke(
+        app,
+        [
+            "--file",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_pipeline["result"].write_csv.assert_called_once_with(output)
+    mock_pipeline["result"].display.assert_not_called()
+
+
+def test_extract_nonexistent_output_dir(source_file, attrs_file, tmp_path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "--file",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--output",
+            str(tmp_path / "nonexistent" / "results.csv"),
+        ],
+    )
+    assert result.exit_code != 0
 
 
 def test_extract_missing_file_option(attrs_file) -> None:
