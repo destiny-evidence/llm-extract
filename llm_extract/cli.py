@@ -38,9 +38,13 @@ def extract_command(
     ),
     output: Optional[Path] = typer.Option(
         None,
-        help="CSV file path to write results to. If omitted, results are printed to the console.",
+        help=(
+            "Where to write results. Pass a .csv file path for an exact destination, "
+            "or a directory to auto-name the file as <source>-extracted.csv. "
+            "If omitted, results are printed to the console."
+        ),
         file_okay=True,
-        dir_okay=False,
+        dir_okay=True,
         writable=True,
     ),
 ) -> None:
@@ -48,7 +52,9 @@ def extract_command(
     configure_dspy(env_file=env_file)
     attributes = load_attributes_csv(attrs)
     result = extract(file.read_text(), attributes)
-    if output:
-        result.write_csv(output)
-    else:
+    if output is None:
         result.display()
+    else:
+        if output.is_dir():
+            output = output / f"{file.stem}-extracted.csv"
+        result.write_csv(output)

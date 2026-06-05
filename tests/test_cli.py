@@ -115,6 +115,26 @@ def test_extract_calls_write_csv_when_output_given(
     mock_pipeline["result"].display.assert_not_called()
 
 
+def test_extract_auto_names_file_when_output_is_directory(
+    source_file, attrs_file, tmp_path, mock_pipeline
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "--file",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    expected = tmp_path / "source-extracted.csv"
+    mock_pipeline["result"].write_csv.assert_called_once_with(expected)
+
+
 def test_extract_nonexistent_output_dir(source_file, attrs_file, tmp_path) -> None:
     result = runner.invoke(
         app,
