@@ -39,7 +39,8 @@ def extract_command(
     ),
     with_reasoning: bool = typer.Option(
         False,
-        "--with-reasoning/--no-reasoning",
+        "--with-reasoning",
+        is_flag=True,
         help="Use chain-of-thought reasoning. Produces a _reasoning_ row in the output but adds latency and cost.",
     ),
     output: Optional[Path] = typer.Option(
