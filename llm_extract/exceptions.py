@@ -8,3 +8,7 @@ class LoadingAttributeFromCSVError(Exception):
 
 class CannotCreateAttributeWithDisallowedNameError(Exception):
     """Raised when an attribute uses a reserved name."""
+
+
+class MissingEnvironmentVariablesError(Exception):
+    """Raised when one or more required environment variables are not set after loading .env sources."""
