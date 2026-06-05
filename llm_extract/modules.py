@@ -66,7 +66,7 @@ class Extract(dspy.Module):
     def __init__(self, signature: dspy.Signature) -> None:
         self.signature = signature
 
-    def forward(self, source: str, with_reasoning: bool = True) -> dspy.Prediction:
+    def forward(self, source: str, with_reasoning: bool = False) -> dspy.Prediction:
         """
         Run extraction on the source text.
 

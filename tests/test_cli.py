@@ -59,7 +59,9 @@ def test_extract_happy_path(source_file, attrs_file, mock_pipeline) -> None:
     mock_pipeline["configure"].assert_called_once_with(env_file=None)
     mock_pipeline["load"].assert_called_once_with(attrs_file)
     mock_pipeline["extract"].assert_called_once_with(
-        "Some product description text.", mock_pipeline["load"].return_value
+        "Some product description text.",
+        mock_pipeline["load"].return_value,
+        with_reasoning=False,
     )
 
 
@@ -80,6 +82,20 @@ def test_extract_with_env_file(
 
     assert result.exit_code == 0
     mock_pipeline["configure"].assert_called_once_with(env_file=env_file)
+
+
+def test_extract_with_reasoning(source_file, attrs_file, mock_pipeline) -> None:
+    result = runner.invoke(
+        app,
+        ["--file", str(source_file), "--attrs", str(attrs_file), "--with-reasoning"],
+    )
+
+    assert result.exit_code == 0
+    mock_pipeline["extract"].assert_called_once_with(
+        "Some product description text.",
+        mock_pipeline["load"].return_value,
+        with_reasoning=True,
+    )
 
 
 def test_extract_calls_display_when_no_output(

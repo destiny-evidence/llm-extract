@@ -32,7 +32,15 @@ def test_extract_passes_source_to_extractor(sample_attrs) -> None:
         mock_extractor = MagicMock()
         mock_extract_cls.return_value = mock_extractor
         extract("Some product text.", sample_attrs)
-    mock_extractor.assert_called_once_with("Some product text.")
+    mock_extractor.assert_called_once_with("Some product text.", with_reasoning=False)
+
+
+def test_extract_passes_with_reasoning_to_extractor(sample_attrs) -> None:
+    with patch("llm_extract.api.Extract") as mock_extract_cls:
+        mock_extractor = MagicMock()
+        mock_extract_cls.return_value = mock_extractor
+        extract("Some product text.", sample_attrs, with_reasoning=True)
+    mock_extractor.assert_called_once_with("Some product text.", with_reasoning=True)
 
 
 def test_extract_builds_signature_from_attributes(sample_attrs) -> None:

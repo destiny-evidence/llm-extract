@@ -37,6 +37,11 @@ def extract_command(
         dir_okay=False,
         readable=True,
     ),
+    with_reasoning: bool = typer.Option(
+        False,
+        "--with-reasoning/--no-reasoning",
+        help="Use chain-of-thought reasoning. Produces a _reasoning_ row in the output but adds latency and cost.",
+    ),
     output: Optional[Path] = typer.Option(
         None,
         help=(
@@ -52,7 +57,7 @@ def extract_command(
     """Extract structured attributes from a text file."""
     configure_dspy(env_file=env_file)
     attributes = load_attributes_csv(attrs)
-    result = extract(file.read_text(), attributes)
+    result = extract(file.read_text(), attributes, with_reasoning=with_reasoning)
     if output is None:
         result.display()
     else:
