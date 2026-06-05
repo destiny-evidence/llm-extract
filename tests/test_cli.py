@@ -30,25 +30,19 @@ def env_file(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def mock_pipeline():
-    """Patch the full extraction pipeline so no LLM calls are made."""
+    """Patch the extraction pipeline so no LLM calls are made."""
     mock_prediction = MagicMock()
     mock_prediction.__str__ = lambda self: "Prediction(product_name='Widget')"
 
     with (
         patch("llm_extract.cli.configure_dspy") as mock_configure,
         patch("llm_extract.cli.load_attributes_csv") as mock_load,
-        patch("llm_extract.cli.extraction_signature_builder") as mock_builder,
-        patch("llm_extract.cli.Extract") as mock_extract_cls,
+        patch("llm_extract.cli.extract", return_value=mock_prediction) as mock_extract,
     ):
-        mock_extractor = MagicMock(return_value=mock_prediction)
-        mock_extract_cls.return_value = mock_extractor
-
         yield {
             "configure": mock_configure,
             "load": mock_load,
-            "builder": mock_builder,
-            "extract_cls": mock_extract_cls,
-            "extractor": mock_extractor,
+            "extract": mock_extract,
             "prediction": mock_prediction,
         }
 
@@ -61,8 +55,9 @@ def test_extract_happy_path(source_file, attrs_file, mock_pipeline) -> None:
     assert result.exit_code == 0
     mock_pipeline["configure"].assert_called_once_with(env_file=None)
     mock_pipeline["load"].assert_called_once_with(attrs_file)
-    mock_pipeline["builder"].assert_called_once()
-    mock_pipeline["extractor"].assert_called_once_with("Some product description text.")
+    mock_pipeline["extract"].assert_called_once_with(
+        "Some product description text.", mock_pipeline["load"].return_value
+    )
 
 
 def test_extract_with_env_file(

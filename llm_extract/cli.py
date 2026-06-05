@@ -3,10 +3,9 @@ from pathlib import Path
 import typer
 from typing import Optional
 
+from llm_extract.api import extract
 from llm_extract.config import configure_dspy
-from llm_extract.factory import extraction_signature_builder
 from llm_extract.loader import load_attributes_csv
-from llm_extract.modules import Extract
 
 app = typer.Typer()
 
@@ -41,8 +40,5 @@ def extract(
     """Extract structured attributes from a text file."""
     configure_dspy(env_file=env_file)
     attributes = load_attributes_csv(attrs)
-    signature = extraction_signature_builder(attributes)
-    extractor = Extract(signature)
-    source = file.read_text()
-    results = extractor(source)
+    results = extract(file.read_text(), attributes)
     typer.echo(results)
