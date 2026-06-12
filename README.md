@@ -115,12 +115,15 @@ llm-extract --file <text-file> --attrs <attributes-csv>
 | Option | Required | Description |
 |---|---|---|
 | `--file` | Yes | Path to the text file to extract from |
-| `--attrs` | Yes | Path to the CSV file defining the attributes |
+| `--attrs` | Yes | Path to the CSV file defining the attributes, or an Excel workbook defining custom types (see [Custom types](#custom-types-excel-templates)) |
+| `--type` | Depends | Name of the top-level sheet to extract. Required when `--attrs` is an Excel workbook. |
 | `--env` | No | Path to a `.env` file (overrides all other credential sources) |
 | `--with-reasoning` | No | Enable chain-of-thought reasoning. Adds a `_reasoning_` row to the output explaining the extraction. Off by default. |
-| `--output` | No | Where to write results. Pass a `.csv` file path for an exact destination, or a directory to auto-name the file as `<source>-extracted.csv`. If omitted, results are printed to the console. |
+| `--output` | No | Where to write results. Pass a `.csv` or `.xlsx` file path for an exact destination, or a directory to auto-name the file (`<source>-extracted.csv`, or `.xlsx` when `--attrs` is an Excel template). If omitted, results are printed to the console. |
 
 ### Output format
+
+#### Console
 
 Without `--output`, results are printed as an aligned table:
 
@@ -131,7 +134,24 @@ price         1495.0
 in_stock      True
 ```
 
-With `--output`, results are written to a CSV with `name` and `value` columns:
+If `--attrs` is an Excel template (see [Custom types](#custom-types-excel-templates)), plain attributes are shown the same way, but any attribute with a custom type is shown as its own titled table underneath, with one row per item:
+
+```
+name           value
+interventions  see 'interventions' table below
+
+interventions
+group_name   intervention_type.type_of_intervention
+-----------  ---------------------------------------
+Risperidone  Intervention
+Haloperidol  NOT_FOUND
+```
+
+Tables wider than your terminal are printed as one `column: value` block per item instead of a grid.
+
+#### CSV (`--output results.csv`)
+
+Results are written to a CSV with `name` and `value` columns:
 
 ```
 name,value
@@ -140,10 +160,21 @@ price,1495.0
 in_stock,True
 ```
 
-Two special values may appear:
+Custom-type attributes are JSON-encoded in their cell.
+
+#### Excel (`--output results.xlsx`)
+
+Results are written to a multi-sheet workbook:
+
+- A **"Summary"** sheet has one row per top-level attribute. Plain attributes show their value directly.
+- Attributes with a custom type (or a non-empty list of one) get a hyperlink in the Summary sheet to a dedicated sheet, with one row per item and one column per field.
+- Fields that are themselves a custom type one level deep are flattened into dot-prefixed columns (e.g. `intervention_type.type_of_intervention`). Any deeper nesting falls back to a JSON-encoded cell.
+- Custom-type attributes with no value show `NOT_FOUND` in the Summary sheet, with no dedicated sheet created.
+
+Two special values may appear in any output format:
 
 - **`NOT_FOUND`** — the attribute was not present in the source text.
-- **`_reasoning_`** — a final row containing the LLM's chain-of-thought explanation for the extraction. Only present when reasoning was produced.
+- **`_reasoning_`** — a row containing the LLM's chain-of-thought explanation for the extraction (last row in CSV/Summary). Only present when `--with-reasoning` was used.
 
 ### Defining attributes
 
@@ -189,6 +220,43 @@ Finally, use `dict` when you want a set of named values grouped together (e.g. m
 
 The pattern is `dict[key type, value type]` — you can use any base type for either side.
 
+### Custom types (Excel templates)
+
+For more structured extractions — e.g. a study with multiple interventions, each with their own fields — pass an Excel workbook (`.xlsx` or `.xlsm`) as `--attrs` instead of a CSV.
+
+Each **sheet** in the workbook defines a custom type: the sheet name is the type name, and each row defines one field of that type using the same `name`, `type`, `description` columns as a CSV. A field's `type` can reference another sheet by name to nest that type, or `list[OtherSheet]` for a list of that type.
+
+Use `--type` to choose which sheet is the top-level type to extract.
+
+**Example workbook:**
+
+`Study` sheet:
+```
+name,type,description
+title,str,The title of the study
+interventions,list[Intervention],The interventions compared in the study
+```
+
+`Intervention` sheet:
+```
+name,type,description
+group_name,str,The name of the intervention group
+intervention_type,InterventionType,Details of the intervention type
+```
+
+`InterventionType` sheet:
+```
+name,type,description
+type_of_intervention,str,e.g. drug, placebo, surgery, behavioural therapy
+```
+
+**Run:**
+```bash
+llm-extract --file paper.txt --attrs template.xlsx --type Study
+```
+
+Custom types can be referenced from any sheet, but circular references (a type that references itself, directly or indirectly) and references to sheets that don't exist will raise an error.
+
 ### Examples
 
 Print results to the console:
@@ -204,6 +272,16 @@ llm-extract --file paper.txt --attrs fields.csv --output results.csv
 Save to a directory (auto-named `paper-extracted.csv`):
 ```bash
 llm-extract --file paper.txt --attrs fields.csv --output /path/to/dir/
+```
+
+Extract using an Excel template of custom types:
+```bash
+llm-extract --file paper.txt --attrs template.xlsx --type Study
+```
+
+Save a custom-type extraction to a multi-sheet Excel workbook:
+```bash
+llm-extract --file paper.txt --attrs template.xlsx --type Study --output results.xlsx
 ```
 
 Use chain-of-thought reasoning:
@@ -227,3 +305,9 @@ llm-extract --file paper.txt --attrs fields.csv --env /path/to/.env
 **`NOT_FOUND` in results** — the LLM could not locate that attribute in the source text. Consider making the description in your attributes CSV more specific.
 
 **`Invalid value for '--output'`** — the directory you passed does not exist. Create it first, or pass a full file path instead.
+
+**`--type is required when --attrs is an Excel workbook`** — pass `--type <SheetName>` to choose the top-level sheet to extract.
+
+**`No sheet named '...' was found`** — a `type` column references a sheet that doesn't exist in the workbook. Check the spelling matches the sheet name exactly.
+
+**`Circular type reference detected`** — two or more sheets reference each other (directly or via other sheets), which can't be resolved into a fixed structure. Remove the cycle from your template.

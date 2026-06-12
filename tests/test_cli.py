@@ -1,3 +1,4 @@
+import openpyxl
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -18,6 +19,18 @@ def source_file(tmp_path: Path) -> Path:
 def attrs_file(tmp_path: Path) -> Path:
     f = tmp_path / "attrs.csv"
     f.write_text("name,type,description\nproduct_name,str,The product name\n")
+    return f
+
+
+@pytest.fixture
+def excel_attrs_file(tmp_path: Path) -> Path:
+    f = tmp_path / "attrs.xlsx"
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Study"
+    sheet.append(["name", "type", "description"])
+    sheet.append(["product_name", "str", "The product name"])
+    workbook.save(f)
     return f
 
 
@@ -45,6 +58,30 @@ def mock_pipeline():
         yield {
             "configure": mock_configure,
             "load": mock_load,
+            "extract": mock_extract,
+            "result": mock_result,
+        }
+
+
+@pytest.fixture
+def mock_excel_pipeline():
+    """Patch the Excel-based extraction pipeline so no LLM calls are made."""
+    mock_result = MagicMock()
+    mock_result.to_csv_rows.return_value = [
+        ["name", "value"],
+        ["product_name", "Widget"],
+    ]
+
+    with (
+        patch("llm_extract.cli.configure_dspy") as mock_configure,
+        patch("llm_extract.cli.load_workbook_sheets") as mock_load_sheets,
+        patch("llm_extract.cli.build_attributes_from_sheets") as mock_build,
+        patch("llm_extract.cli.extract", return_value=mock_result) as mock_extract,
+    ):
+        yield {
+            "configure": mock_configure,
+            "load_sheets": mock_load_sheets,
+            "build": mock_build,
             "extract": mock_extract,
             "result": mock_result,
         }
@@ -151,6 +188,49 @@ def test_extract_auto_names_file_when_output_is_directory(
     mock_pipeline["result"].write_csv.assert_called_once_with(expected)
 
 
+def test_extract_calls_write_excel_when_output_is_xlsx(
+    source_file, attrs_file, tmp_path, mock_pipeline
+) -> None:
+    output = tmp_path / "results.xlsx"
+    result = runner.invoke(
+        app,
+        [
+            "--file",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_pipeline["result"].write_excel.assert_called_once_with(output)
+    mock_pipeline["result"].write_csv.assert_not_called()
+
+
+def test_extract_auto_names_xlsx_when_output_is_directory_and_attrs_is_excel(
+    source_file, excel_attrs_file, tmp_path, mock_excel_pipeline
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "--file",
+            str(source_file),
+            "--attrs",
+            str(excel_attrs_file),
+            "--type",
+            "Study",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    expected = tmp_path / "source-extracted.xlsx"
+    mock_excel_pipeline["result"].write_excel.assert_called_once_with(expected)
+
+
 def test_extract_nonexistent_output_dir(source_file, attrs_file, tmp_path) -> None:
     result = runner.invoke(
         app,
@@ -202,4 +282,42 @@ def test_extract_nonexistent_env_file(source_file, attrs_file, tmp_path) -> None
             str(tmp_path / "ghost.env"),
         ],
     )
+    assert result.exit_code != 0
+
+
+def test_extract_with_excel_attrs_and_type(
+    source_file, excel_attrs_file, mock_excel_pipeline
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "--file",
+            str(source_file),
+            "--attrs",
+            str(excel_attrs_file),
+            "--type",
+            "Study",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_excel_pipeline["load_sheets"].assert_called_once_with(excel_attrs_file)
+    mock_excel_pipeline["build"].assert_called_once_with(
+        mock_excel_pipeline["load_sheets"].return_value, "Study"
+    )
+    mock_excel_pipeline["extract"].assert_called_once_with(
+        "Some product description text.",
+        mock_excel_pipeline["build"].return_value,
+        with_reasoning=False,
+    )
+
+
+def test_extract_with_excel_attrs_missing_type_errors(
+    source_file, excel_attrs_file
+) -> None:
+    with patch("llm_extract.cli.configure_dspy"):
+        result = runner.invoke(
+            app, ["--file", str(source_file), "--attrs", str(excel_attrs_file)]
+        )
+
     assert result.exit_code != 0

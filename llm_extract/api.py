@@ -1,6 +1,7 @@
 from llm_extract.models import Attribute
 from llm_extract.factory import extraction_signature_builder
-from llm_extract.modules import Extract, ExtractionResult
+from llm_extract.export import ExtractionResult
+from llm_extract.modules import Extract
 
 
 def extract(
@@ -16,4 +17,7 @@ def extract(
     """
     signature = extraction_signature_builder(attributes)
     extractor = Extract(signature)
-    return ExtractionResult(prediction=extractor(source, with_reasoning=with_reasoning))
+    return ExtractionResult(
+        prediction=extractor(source, with_reasoning=with_reasoning),
+        attributes=attributes,
+    )
