@@ -16,7 +16,13 @@ def extraction_signature_builder(attrs: list[Attribute]) -> dspy.Signature:
     """
     fields, annotations = fields_builder(attrs)
     return type(
-        "CustomSignature", (dspy.Signature,), {**fields, "__annotations__": annotations}
+        "ExtractAttributesFromSource",
+        (dspy.Signature,),
+        {
+            **fields,
+            "__annotations__": annotations,
+            "__doc__": EXTRACTION_SIGNATURE_DOCSTRING,
+        },
     )
 
 
