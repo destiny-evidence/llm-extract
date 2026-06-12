@@ -188,6 +188,49 @@ def test_extract_auto_names_file_when_output_is_directory(
     mock_pipeline["result"].write_csv.assert_called_once_with(expected)
 
 
+def test_extract_calls_write_excel_when_output_is_xlsx(
+    source_file, attrs_file, tmp_path, mock_pipeline
+) -> None:
+    output = tmp_path / "results.xlsx"
+    result = runner.invoke(
+        app,
+        [
+            "--file",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_pipeline["result"].write_excel.assert_called_once_with(output)
+    mock_pipeline["result"].write_csv.assert_not_called()
+
+
+def test_extract_auto_names_xlsx_when_output_is_directory_and_attrs_is_excel(
+    source_file, excel_attrs_file, tmp_path, mock_excel_pipeline
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "--file",
+            str(source_file),
+            "--attrs",
+            str(excel_attrs_file),
+            "--type",
+            "Study",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    expected = tmp_path / "source-extracted.xlsx"
+    mock_excel_pipeline["result"].write_excel.assert_called_once_with(expected)
+
+
 def test_extract_nonexistent_output_dir(source_file, attrs_file, tmp_path) -> None:
     result = runner.invoke(
         app,

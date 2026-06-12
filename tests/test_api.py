@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from llm_extract.api import extract
 from llm_extract.models import Attribute
-from llm_extract.modules import ExtractionResult
+from llm_extract.export import ExtractionResult
 
 
 @pytest.fixture
@@ -25,6 +25,7 @@ def test_extract_returns_extraction_result(sample_attrs) -> None:
         mock_extract_cls.return_value = MagicMock(return_value=MagicMock())
         result = extract("Some product text.", sample_attrs)
     assert isinstance(result, ExtractionResult)
+    assert result.attributes == sample_attrs
 
 
 def test_extract_passes_source_to_extractor(sample_attrs) -> None:

@@ -58,9 +58,10 @@ def extract_command(
     output: Optional[Path] = typer.Option(
         None,
         help=(
-            "Where to write results. Pass a .csv file path for an exact destination, "
-            "or a directory to auto-name the file as <source>-extracted.csv. "
-            "If omitted, results are printed to the console."
+            "Where to write results. Pass a .csv or .xlsx file path for an exact "
+            "destination, or a directory to auto-name the file as "
+            "<source>-extracted.csv. Excel output breaks custom-type attributes "
+            "down across sheets. If omitted, results are printed to the console."
         ),
         file_okay=True,
         dir_okay=True,
@@ -84,5 +85,9 @@ def extract_command(
         result.display()
     else:
         if output.is_dir():
-            output = output / f"{file.stem}-extracted.csv"
-        result.write_csv(output)
+            extension = "xlsx" if attrs.suffix.lower() in EXCEL_SUFFIXES else "csv"
+            output = output / f"{file.stem}-extracted.{extension}"
+        if output.suffix.lower() in EXCEL_SUFFIXES:
+            result.write_excel(output)
+        else:
+            result.write_csv(output)
