@@ -2,6 +2,7 @@ import csv
 import dataclasses
 import json
 import re
+import shutil
 import typing
 from pathlib import Path
 
@@ -100,23 +101,123 @@ def _flatten_instance(instance: object, dataclass_type: type, prefix: str = "") 
     return row
 
 
-def _write_dataclass_sheet(
-    workbook: openpyxl.Workbook, sheet_name: str, dataclass_type: type, items: list
+@dataclasses.dataclass
+class _AttributeTable:
+    """Flattened tabular data for a found custom-type attribute."""
+
+    columns: list[str]
+    rows: list[list]
+
+
+def _classify_attribute(attr: Attribute, prediction: dspy.Prediction) -> object:
+    """
+    Classify a top-level attribute's value for presentation.
+
+    :param attr: the attribute definition, used for its type
+    :param prediction: the DSPy Prediction holding the extracted value
+    :return: an `_AttributeTable` if `attr` is a custom type (or a list of
+             one) with a non-empty value, NOT_FOUND if it's a custom type
+             with no value, otherwise the value formatted via
+             :func:`_format_value`
+    """
+    value = getattr(prediction, attr.name, None)
+    inner_type = _unwrap_optional(attr.attr_type)
+
+    dataclass_type = None
+    items = []
+    if typing.get_origin(inner_type) is list:
+        (elem_type,) = typing.get_args(inner_type)
+        if dataclasses.is_dataclass(elem_type):
+            dataclass_type, items = elem_type, value or []
+    elif dataclasses.is_dataclass(inner_type):
+        dataclass_type = inner_type
+        items = [value] if value is not None else []
+
+    if dataclass_type is None:
+        return _format_value(value)
+    if not items:
+        return NOT_FOUND
+
+    columns = _flatten_columns(dataclass_type)
+    rows = [
+        [_flatten_instance(item, dataclass_type)[column] for column in columns]
+        for item in items
+    ]
+    return _AttributeTable(columns, rows)
+
+
+_MAX_COLUMN_WIDTH = 40
+_MIN_COLUMN_WIDTH = 10
+
+
+def _format_cell(value: object, width: int) -> str:
+    """
+    Format a value for a table cell, collapsing newlines and truncating.
+
+    :param value: the cell value
+    :param width: maximum display width
+    :return: a single-line string, ellipsised if longer than `width`
+    """
+    text = str(value).replace("\n", " ")
+    if len(text) > width:
+        return text[: width - 1] + "…"
+    return text
+
+
+def _print_table(title: str, columns: list[str], rows: list[list]) -> None:
+    """
+    Print a titled table of flattened attribute rows to stdout.
+
+    Printed as a grid if it fits the terminal width, otherwise as one
+    "column: value" block per row, since a wide grid (e.g. 20+ columns)
+    would just wrap into an unreadable mess.
+
+    :param title: table title, printed above the table
+    :param columns: column headers
+    :param rows: row values, one list per row, matching `columns`
+    """
+    print(f"\n{title}")
+    terminal_width = shutil.get_terminal_size(fallback=(80, 24)).columns
+    widths = [
+        min(_MAX_COLUMN_WIDTH, max(len(col), *(len(str(row[i])) for row in rows)))
+        for i, col in enumerate(columns)
+    ]
+    if sum(widths) + 2 * (len(columns) - 1) <= terminal_width:
+        _print_table_grid(columns, rows, widths)
+    else:
+        _print_table_records(columns, rows, terminal_width)
+
+
+def _print_table_grid(columns: list[str], rows: list[list], widths: list[int]) -> None:
+    """
+    Print rows as a grid, with one column per field.
+
+    :param columns: column headers
+    :param rows: row values, one list per row, matching `columns`
+    :param widths: display width for each column
+    """
+    print("  ".join(_format_cell(col, w).ljust(w) for col, w in zip(columns, widths)))
+    print("  ".join("-" * w for w in widths))
+    for row in rows:
+        print("  ".join(_format_cell(cell, w).ljust(w) for cell, w in zip(row, widths)))
+
+
+def _print_table_records(
+    columns: list[str], rows: list[list], terminal_width: int
 ) -> None:
     """
-    Add a sheet with one row per item, flattening dataclass fields into columns.
+    Print rows as one "column: value" block per row.
 
-    :param workbook: the workbook to add the sheet to
-    :param sheet_name: title for the new sheet, assumed already sanitised
-    :param dataclass_type: the dataclass type describing each item's shape
-    :param items: dataclass instances to write as rows, must be non-empty
+    :param columns: column headers
+    :param rows: row values, one list per row, matching `columns`
+    :param terminal_width: available width, used to size the value column
     """
-    columns = _flatten_columns(dataclass_type)
-    sheet = workbook.create_sheet(sheet_name)
-    sheet.append(columns)
-    for item in items:
-        row = _flatten_instance(item, dataclass_type)
-        sheet.append([row[column] for column in columns])
+    name_width = max(len(col) for col in columns)
+    value_width = max(terminal_width - name_width - 2, _MIN_COLUMN_WIDTH)
+    for i, row in enumerate(rows, start=1):
+        print(f"-- item {i} --")
+        for col, value in zip(columns, row):
+            print(f"{col.ljust(name_width)}  {_format_cell(value, value_width)}")
 
 
 def _append_link_row(
@@ -193,27 +294,16 @@ class ExtractionResult:
         summary.append(["name", "value"])
 
         for attr in self.attributes:
-            value = getattr(self.prediction, attr.name, None)
-            inner_type = _unwrap_optional(attr.attr_type)
-
-            dataclass_type = None
-            items = []
-            if typing.get_origin(inner_type) is list:
-                (elem_type,) = typing.get_args(inner_type)
-                if dataclasses.is_dataclass(elem_type):
-                    dataclass_type, items = elem_type, value or []
-            elif dataclasses.is_dataclass(inner_type):
-                dataclass_type = inner_type
-                items = [value] if value is not None else []
-
-            if dataclass_type is None:
-                summary.append([attr.name, _format_value(value)])
-            elif items:
+            result = _classify_attribute(attr, self.prediction)
+            if isinstance(result, _AttributeTable):
                 sheet_name = _sanitize_sheet_name(attr.name)
-                _write_dataclass_sheet(workbook, sheet_name, dataclass_type, items)
+                sheet = workbook.create_sheet(sheet_name)
+                sheet.append(result.columns)
+                for row in result.rows:
+                    sheet.append(row)
                 _append_link_row(summary, attr.name, sheet_name)
             else:
-                summary.append([attr.name, NOT_FOUND])
+                summary.append([attr.name, result])
 
         reasoning = getattr(self.prediction, "reasoning", None)
         if reasoning is not None:
@@ -222,8 +312,42 @@ class ExtractionResult:
         workbook.save(path)
 
     def display(self) -> None:
-        """Print extraction results as an aligned two-column table to stdout."""
-        rows = self.to_csv_rows()
-        name_width = max(len(str(row[0])) for row in rows)
-        for row in rows:
+        """
+        Print extraction results to stdout.
+
+        Without attribute metadata, falls back to the same aligned
+        name/value list as `to_csv_rows`. With attribute metadata, plain
+        attributes are printed in that list as before, but attributes that
+        are a custom type, or a non-empty list of a custom type, are instead
+        printed as their own titled table below the list, with one row per
+        item and a column per (flattened) field. Custom types with no value
+        show NOT_FOUND in the list instead. Reasoning, if present, is
+        appended to the list.
+        """
+        if not self.attributes:
+            rows = self.to_csv_rows()
+            name_width = max(len(str(row[0])) for row in rows)
+            for row in rows:
+                print(f"{str(row[0]).ljust(name_width)}  {row[1]}")
+            return
+
+        summary_rows = [["name", "value"]]
+        tables = []
+        for attr in self.attributes:
+            result = _classify_attribute(attr, self.prediction)
+            if isinstance(result, _AttributeTable):
+                tables.append((attr.name, result))
+                summary_rows.append([attr.name, f"see '{attr.name}' table below"])
+            else:
+                summary_rows.append([attr.name, result])
+
+        reasoning = getattr(self.prediction, "reasoning", None)
+        if reasoning is not None:
+            summary_rows.append(["_reasoning_", reasoning])
+
+        name_width = max(len(str(row[0])) for row in summary_rows)
+        for row in summary_rows:
             print(f"{str(row[0]).ljust(name_width)}  {row[1]}")
+
+        for name, table in tables:
+            _print_table(name, table.columns, table.rows)

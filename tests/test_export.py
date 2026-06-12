@@ -350,3 +350,107 @@ def test_write_excel_deep_nesting_falls_back_to_json(tmp_path) -> None:
     assert rows[0] == ("name", "category.value", "sub_interventions")
     assert rows[1][0:2] == ("BPRS score", "Mental Health Outcome")
     assert rows[1][2] == ('[{"group_name": "Risperidone", "intervention_type": null}]')
+
+
+# --- display with attribute metadata ---
+
+
+def test_display_without_attributes_falls_back_to_csv_rows(capsys) -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(product_name="Widget", price=14.99)
+    )
+    result.display()
+    output = capsys.readouterr().out
+    assert "product_name" in output
+    assert "Widget" in output
+    assert "price" in output
+    assert "14.99" in output
+
+
+def test_display_with_attributes_prints_plain_values(capsys) -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(product_name="Widget", price=14.99),
+        attributes=[
+            Attribute(
+                name="product_name", attr_type=typing.Optional[str], description=""
+            ),
+            Attribute(name="price", attr_type=typing.Optional[float], description=""),
+        ],
+    )
+    result.display()
+    output = capsys.readouterr().out
+    assert "product_name" in output
+    assert "Widget" in output
+    assert "price" in output
+    assert "14.99" in output
+
+
+def test_display_with_custom_type_prints_table(capsys) -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(
+            interventions=[
+                _Intervention(
+                    group_name="Risperidone",
+                    intervention_type=_InterventionType("Intervention"),
+                ),
+                _Intervention(group_name="Haloperidol", intervention_type=None),
+            ]
+        ),
+        attributes=[
+            Attribute(
+                name="interventions",
+                attr_type=typing.Optional[list[_Intervention]],
+                description="",
+            ),
+        ],
+    )
+    result.display()
+    output = capsys.readouterr().out
+
+    assert "interventions" in output
+    assert "see 'interventions' table below" in output
+    assert "group_name" in output
+    assert "intervention_type.type_of_intervention" in output
+    assert "Risperidone" in output
+    assert "Intervention" in output
+    assert "Haloperidol" in output
+    assert NOT_FOUND in output
+
+
+def test_display_with_missing_custom_type_shows_not_found(capsys) -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(interventions=None),
+        attributes=[
+            Attribute(
+                name="interventions",
+                attr_type=typing.Optional[list[_Intervention]],
+                description="",
+            ),
+        ],
+    )
+    result.display()
+    output = capsys.readouterr().out
+
+    lines = output.splitlines()
+    assert any(line.startswith("interventions") and NOT_FOUND in line for line in lines)
+
+
+def test_display_truncates_long_cell_values(capsys) -> None:
+    long_value = "x" * 100
+    result = ExtractionResult(
+        prediction=dspy.Prediction(
+            interventions=[_Intervention(group_name=long_value, intervention_type=None)]
+        ),
+        attributes=[
+            Attribute(
+                name="interventions",
+                attr_type=typing.Optional[list[_Intervention]],
+                description="",
+            ),
+        ],
+    )
+    result.display()
+    output = capsys.readouterr().out
+
+    for line in output.splitlines():
+        assert len(line) < len(long_value)
