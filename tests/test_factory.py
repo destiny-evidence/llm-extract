@@ -93,6 +93,14 @@ def test_build_attributes_from_sheets_simple_types() -> None:
     assert attrs[1].attr_type == typing.Optional[int]
 
 
+def test_build_attributes_from_sheets_literal_type() -> None:
+    # Literal["small", "large"] should not be mistaken for a custom-type
+    # sheet reference to a sheet named "small" or "large"
+    sheets = {"Study": [_row("size", 'Literal["small", "large"]')]}
+    attrs = build_attributes_from_sheets(sheets, "Study")
+    assert attrs[0].attr_type == typing.Optional[typing.Literal["small", "large"]]
+
+
 def test_build_attributes_from_sheets_unknown_root_sheet_raises() -> None:
     with pytest.raises(UnknownCustomTypeError):
         build_attributes_from_sheets({}, "Study")

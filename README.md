@@ -220,6 +220,14 @@ Finally, use `dict` when you want a set of named values grouped together (e.g. m
 
 The pattern is `dict[key type, value type]` — you can use any base type for either side.
 
+Use `Literal` when a field should only ever be one of a fixed set of options (e.g. a category or status), rather than free text:
+
+| Type | What it stores | Example value |
+|---|---|---|
+| `Literal["small", "medium", "large"]` | One of a fixed set of text options | `medium` |
+
+This constrains the LLM to pick one of the listed values instead of generating arbitrary text.
+
 ### Custom types (Excel templates)
 
 For more structured extractions — e.g. a study with multiple interventions, each with their own fields — pass an Excel workbook (`.xlsx` or `.xlsm`) as `--attrs` instead of a CSV.

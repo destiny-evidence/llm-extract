@@ -90,7 +90,10 @@ def _custom_type_names(type_str: str) -> set[str]:
     :param type_str: type expression string, e.g. 'list[Author]' or 'str'
     :return: set of identifiers in the expression that are not built-in allowed types
     """
-    return set(re.findall(r"[a-zA-Z]\w*", type_str)) - ALLOWED_TYPES
+    # Strip quoted contents (e.g. Literal["a", "b"]) so literal values aren't
+    # mistaken for custom-type sheet references.
+    without_string_literals = re.sub(r"'[^']*'|\"[^\"]*\"", "", type_str)
+    return set(re.findall(r"[a-zA-Z]\w*", without_string_literals)) - ALLOWED_TYPES
 
 
 def _resolve_attributes(

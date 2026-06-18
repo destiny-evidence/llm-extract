@@ -37,6 +37,24 @@ def test_string_to_type_union_types_are_accepted() -> None:
     assert string_to_type("str | int | float") == typing.Optional[str | int | float]
 
 
+def test_string_to_type_literal() -> None:
+    assert (
+        string_to_type('Literal["a", "b"]') == typing.Optional[typing.Literal["a", "b"]]
+    )
+    assert (
+        string_to_type("Literal['a', 'b']") == typing.Optional[typing.Literal["a", "b"]]
+    )
+
+
+def test_string_to_type_literal_values_not_treated_as_identifiers() -> None:
+    # 'datetime' would be disallowed as a bare identifier, but here it's a
+    # quoted literal value, so it should not be flagged
+    assert (
+        string_to_type('Literal["datetime"]')
+        == typing.Optional[typing.Literal["datetime"]]
+    )
+
+
 def test_string_to_type_disallowed_identifier_raises() -> None:
     with pytest.raises(ValueError, match="Disallowed types"):
         string_to_type("datetime")

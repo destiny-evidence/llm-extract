@@ -8,7 +8,18 @@ from llm_extract.exceptions import (
 from pydantic.dataclasses import dataclass
 
 # TODO could add Optional + Union for more sophisticated types
-ALLOWED_TYPES = {"str", "int", "float", "bool", "list", "dict", "tuple", "set", "None"}
+ALLOWED_TYPES = {
+    "str",
+    "int",
+    "float",
+    "bool",
+    "list",
+    "dict",
+    "tuple",
+    "set",
+    "None",
+    "Literal",
+}
 
 TypeExpr = typing.Any
 
@@ -27,7 +38,10 @@ def string_to_type(
     :return: the corresponding Optional-wrapped Python type
     """
     type_context = type_context or {}
-    identifiers = set(re.findall(r"[a-zA-Z]\w*", string))
+    # Strip quoted contents (e.g. Literal["a", "b"]) so literal values aren't
+    # mistaken for disallowed type identifiers.
+    without_string_literals = re.sub(r"'[^']*'|\"[^\"]*\"", "", string)
+    identifiers = set(re.findall(r"[a-zA-Z]\w*", without_string_literals))
     allowed = ALLOWED_TYPES | set(type_context)
     if not identifiers <= allowed:
         raise ValueError(f"Disallowed types: {identifiers - allowed}")
