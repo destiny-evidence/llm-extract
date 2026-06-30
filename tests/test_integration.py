@@ -4,6 +4,7 @@ from pathlib import Path
 
 import dspy
 import pytest
+from typer.testing import CliRunner
 from llm_extract.config import configure_dspy
 from llm_extract.loader import load_attributes_csv, load_workbook_sheets
 from llm_extract.factory import (
@@ -11,8 +12,10 @@ from llm_extract.factory import (
     extraction_signature_builder,
 )
 from llm_extract.modules import Extract
+from llm_extract.cli import app
 
 FIXTURES = Path(__file__).parent / "fixtures"
+runner = CliRunner()
 
 
 @pytest.fixture(scope="module")
@@ -100,3 +103,228 @@ def test_can_extract_nested_attributes_from_excel_template(
             assert isinstance(value, inner_type), (
                 f"{attr.name}: expected {inner_type}, got {type(value)}"
             )
+
+
+# ============================================================================
+# CLI INTEGRATION TESTS
+# ============================================================================
+
+
+def test_cli_file_extraction(tmp_path):
+    """Test CLI extraction of a single file."""
+    result = runner.invoke(
+        app,
+        [
+            "file",
+            "--source",
+            str(FIXTURES / "sample.txt"),
+            "--attrs",
+            str(FIXTURES / "attributes.csv"),
+        ],
+    )
+
+    assert result.exit_code == 0
+    # Output should contain extracted data
+    assert len(result.stdout) > 0
+
+
+def test_cli_file_extraction_to_csv(tmp_path):
+    """Test CLI file extraction with CSV output."""
+    output = tmp_path / "result.csv"
+    result = runner.invoke(
+        app,
+        [
+            "file",
+            "--source",
+            str(FIXTURES / "sample.txt"),
+            "--attrs",
+            str(FIXTURES / "attributes.csv"),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert output.exists()
+    content = output.read_text()
+    assert "name" in content
+    assert "value" in content
+
+
+def test_cli_folder_extraction_txt_files(tmp_path):
+    """Test CLI extraction of multiple text files from a folder."""
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(FIXTURES / "documents"),
+            "--attrs",
+            str(FIXTURES / "attributes.csv"),
+            "--filetype",
+            "txt",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    # Should have created extracted CSV files for each txt file
+    extracted_files = list(tmp_path.glob("*.csv"))
+    assert len(extracted_files) == 3
+    # Check that all expected files were created
+    assert (tmp_path / "product1-extracted.csv").exists()
+    assert (tmp_path / "product2-extracted.csv").exists()
+    assert (tmp_path / "product3-extracted.csv").exists()
+
+
+def test_cli_folder_extraction_md_files(tmp_path):
+    """Test CLI extraction of markdown files from a folder."""
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(FIXTURES / "documents"),
+            "--attrs",
+            str(FIXTURES / "attributes.csv"),
+            "--filetype",
+            "md",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    extracted_files = list(tmp_path.glob("*.csv"))
+    assert len(extracted_files) == 2
+    assert (tmp_path / "article1-extracted.csv").exists()
+    assert (tmp_path / "article2-extracted.csv").exists()
+
+
+def test_cli_folder_extraction_multiple_filetypes(tmp_path):
+    """Test CLI extraction of multiple file types."""
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(FIXTURES / "documents"),
+            "--attrs",
+            str(FIXTURES / "attributes.csv"),
+            "--filetype",
+            "txt",
+            "--filetype",
+            "md",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    extracted_files = list(tmp_path.glob("*.csv"))
+    # Should have 3 txt + 2 md = 5 total
+    assert len(extracted_files) == 5
+
+
+def test_cli_folder_extraction_default_output_dir(tmp_path):
+    """Test CLI folder extraction creates default <source>-extracted directory."""
+    # Create a test folder in tmp_path
+    source_folder = tmp_path / "test_docs"
+    source_folder.mkdir()
+    (source_folder / "doc1.txt").write_text("Sample document 1")
+    (source_folder / "doc2.txt").write_text("Sample document 2")
+
+    # Run extraction without specifying output
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(source_folder),
+            "--attrs",
+            str(FIXTURES / "attributes.csv"),
+        ],
+    )
+
+    assert result.exit_code == 0
+    # Should have created test_docs-extracted folder
+    expected_output_dir = tmp_path / "test_docs-extracted"
+    assert expected_output_dir.exists()
+    assert len(list(expected_output_dir.glob("*.csv"))) == 2
+
+
+def test_cli_folder_extraction_with_max_concurrent(tmp_path):
+    """Test CLI folder extraction with custom max_concurrent setting."""
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(FIXTURES / "documents"),
+            "--attrs",
+            str(FIXTURES / "attributes.csv"),
+            "--filetype",
+            "txt",
+            "--max-concurrent",
+            "2",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    extracted_files = list(tmp_path.glob("*.csv"))
+    assert len(extracted_files) == 3
+
+
+def test_cli_folder_extraction_with_reasoning(tmp_path):
+    """Test CLI folder extraction with reasoning flag."""
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(FIXTURES / "documents"),
+            "--attrs",
+            str(FIXTURES / "attributes.csv"),
+            "--filetype",
+            "txt",
+            "--with-reasoning",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    extracted_files = list(tmp_path.glob("*.csv"))
+    assert len(extracted_files) == 3
+    # Check that at least one file contains reasoning
+    has_reasoning = False
+    for file in extracted_files:
+        content = file.read_text()
+        if "_reasoning_" in content:
+            has_reasoning = True
+            break
+    assert has_reasoning
+
+
+def test_cli_folder_extraction_unsupported_filetype(tmp_path):
+    """Test CLI folder extraction with unsupported filetype."""
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(FIXTURES / "documents"),
+            "--attrs",
+            str(FIXTURES / "attributes.csv"),
+            "--filetype",
+            "json",  # Unsupported filetype
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    # Should fail validation with non-zero exit code
+    assert result.exit_code != 0
