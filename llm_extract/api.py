@@ -37,9 +37,9 @@ def extract(
     :return: an ExtractionResult wrapping the DSPy Prediction
     """
     source = Path(source)
-    content = _load_source(source)
     is_multimodal = source.suffix.lower() == ".pdf"
 
+    content = _load_source(source)
     signature = extraction_signature_builder(attributes, multimodal=is_multimodal)
     extractor = Extract(signature)
     return ExtractionResult(

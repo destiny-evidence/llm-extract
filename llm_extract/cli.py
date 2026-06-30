@@ -114,7 +114,8 @@ def file(
     ),
 ) -> None:
     """Extract structured attributes from a single file (text or PDF)."""
-    configure_dspy(env_file=env_file)
+    is_pdf = source.suffix.lower() == ".pdf"
+    configure_dspy(env_file=env_file, multimodal=is_pdf)
     attributes = _load_attributes(attrs, root_type)
 
     result = extract(source, attributes, with_reasoning=with_reasoning)
@@ -200,9 +201,10 @@ def folder(
     ),
 ) -> None:
     """Extract structured attributes from multiple files in a folder (text or PDF)."""
-    configure_dspy(env_file=env_file)
-    attributes = _load_attributes(attrs, root_type)
     filetypes = _validate_filetypes(filetypes)
+    has_pdf = "pdf" in filetypes
+    configure_dspy(env_file=env_file, multimodal=has_pdf)
+    attributes = _load_attributes(attrs, root_type)
     _validate_output_is_directory(output)
 
     results = extract_folder(
