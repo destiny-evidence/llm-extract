@@ -718,3 +718,42 @@ def test_folder_file_path_as_output_errors(source_folder, attrs_file, tmp_path) 
         )
 
     assert result.exit_code != 0
+
+
+def test_folder_with_recursive_flag(
+    source_folder, attrs_file, mock_folder_pipeline
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(source_folder),
+            "--attrs",
+            str(attrs_file),
+            "--recursive",
+        ],
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_folder_pipeline["extract_folder"].call_args[1]
+    assert call_kwargs["recursive"] is True
+
+
+def test_folder_recursive_default_false(
+    source_folder, attrs_file, mock_folder_pipeline
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(source_folder),
+            "--attrs",
+            str(attrs_file),
+        ],
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_folder_pipeline["extract_folder"].call_args[1]
+    assert call_kwargs["recursive"] is False

@@ -33,19 +33,23 @@ def extract_folder(
     filetypes: list[str],
     with_reasoning: bool = False,
     max_concurrent: int = 8,
+    recursive: bool = False,
 ) -> list[tuple[str, ExtractionResult]]:
     """
     Extract structured attributes from all files in a folder concurrently.
 
     Processes multiple file types by iterating through provided filetypes,
-    collecting results across all matches.
+    collecting results across all matches. Can optionally traverse subdirectories
+    recursively while preserving the directory structure in result names.
 
     :param folder_path: path to folder containing text files
     :param attributes: list of attributes defining what to extract
     :param filetypes: list of file types to extract (e.g., ["txt", "md"])
     :param with_reasoning: whether to use chain-of-thought reasoning
     :param max_concurrent: maximum number of concurrent extractions (default 8)
-    :return: list of (filename, ExtractionResult) tuples, sorted by filename
+    :param recursive: whether to recursively traverse subdirectories (default False)
+    :return: list of (relative_path, ExtractionResult) tuples, where relative_path
+             includes directory structure for recursive extractions
     """
     folder_path = Path(folder_path)
     signature = extraction_signature_builder(attributes)
@@ -53,7 +57,7 @@ def extract_folder(
 
     all_results = []
     for filetype in filetypes:
-        pattern = f"*.{filetype}"
+        pattern = f"**/*.{filetype}" if recursive else f"*.{filetype}"
         files = sorted(folder_path.glob(pattern))
 
         if not files:
@@ -70,7 +74,10 @@ def extract_folder(
 
         all_results.extend(
             [
-                (f.stem, ExtractionResult(pred, attributes))
+                (
+                    str(f.relative_to(folder_path).with_suffix("")),
+                    ExtractionResult(pred, attributes),
+                )
                 for f, pred in zip(files, predictions)
             ]
         )

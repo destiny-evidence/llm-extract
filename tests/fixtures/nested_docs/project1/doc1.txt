@@ -1,0 +1,4 @@
+Product: Smart Widget Pro
+This is a premium smart widget designed for integration into IoT systems.
+Price: $199.99
+Status: In stock

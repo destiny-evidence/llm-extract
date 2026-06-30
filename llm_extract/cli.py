@@ -183,6 +183,12 @@ def folder(
         "--max-concurrent",
         help="Maximum number of concurrent extractions (default 8).",
     ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        is_flag=True,
+        help="Recursively traverse subdirectories and preserve directory structure in output.",
+    ),
     output: Optional[Path] = typer.Option(
         None,
         help=(
@@ -206,6 +212,7 @@ def folder(
         filetypes=filetypes,
         with_reasoning=with_reasoning,
         max_concurrent=max_concurrent,
+        recursive=recursive,
     )
 
     if not results:

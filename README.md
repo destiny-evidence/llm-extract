@@ -123,6 +123,14 @@ llm-extract file --source <text-file> --attrs <attributes-csv>
 llm-extract folder --source <folder> --attrs <attributes-csv>
 ```
 
+**For project-driven workflows** — extract recursively from all subdirectories:
+
+```bash
+llm-extract folder --source <project-root> --attrs <attributes-csv> --recursive
+```
+
+This traverses all subdirectories and recreates the folder structure in the output, perfect for processing entire projects or nested document hierarchies.
+
 ### Common options
 
 | Option | Required | Description |
@@ -140,6 +148,7 @@ llm-extract folder --source <folder> --attrs <attributes-csv>
 |---|---|---|
 | `--filetype` | `txt` | File type(s) to process. Pass multiple times for multiple types: `--filetype txt --filetype md`. Supported: `txt`, `md`. |
 | `--max-concurrent` | `8` | Maximum number of concurrent extractions. Use this to control resource usage or respect API rate limits. |
+| `--recursive` | `false` | Recursively traverse subdirectories and preserve directory structure in output. Useful for processing entire projects. |
 
 ### Output format
 
@@ -322,6 +331,12 @@ llm-extract folder --source ./documents --attrs fields.csv --filetype txt --file
 ```bash
 llm-extract folder --source ./documents --attrs fields.csv --max-concurrent 4 --output ./results/
 ```
+
+**Folder — recursive extraction from project:**
+```bash
+llm-extract folder --source ./my-project --attrs fields.csv --recursive
+```
+Extracts from all subdirectories and recreates folder structure in `./my-project-extracted/`.
 
 **Any mode — use chain-of-thought reasoning:**
 ```bash

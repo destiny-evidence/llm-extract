@@ -328,3 +328,51 @@ def test_cli_folder_extraction_unsupported_filetype(tmp_path):
 
     # Should fail validation with non-zero exit code
     assert result.exit_code != 0
+
+
+def test_cli_folder_extraction_recursive(tmp_path):
+    """Test CLI folder extraction with recursive flag."""
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(FIXTURES / "nested_docs"),
+            "--attrs",
+            str(FIXTURES / "attributes.csv"),
+            "--recursive",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    # Should extract files from nested structure
+    extracted_files = list(tmp_path.glob("**/*.csv"))
+    # Should find: project1/doc1, project1/doc2, project2/subdir/doc3
+    assert len(extracted_files) == 3
+    # Verify directory structure is preserved
+    assert (tmp_path / "project1" / "doc1-extracted.csv").exists()
+    assert (tmp_path / "project1" / "doc2-extracted.csv").exists()
+    assert (tmp_path / "project2" / "subdir" / "doc3-extracted.csv").exists()
+
+
+def test_cli_folder_extraction_non_recursive_ignores_subdirs(tmp_path):
+    """Test that non-recursive mode ignores subdirectories."""
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(FIXTURES / "nested_docs"),
+            "--attrs",
+            str(FIXTURES / "attributes.csv"),
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    # Without --recursive, only finds files at top level (none in nested_docs root)
+    extracted_files = list(tmp_path.glob("*.csv"))
+    assert len(extracted_files) == 0

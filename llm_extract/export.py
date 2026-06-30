@@ -362,9 +362,10 @@ def write_extraction_results_to_folder(
     Write multiple extraction results to a folder with one file per result.
 
     Each file is named <filename>-extracted.csv or .xlsx depending on use_excel.
+    Preserves directory structure when results include relative paths with subdirectories.
 
     :param output_dir: directory to write results to (created if it doesn't exist)
-    :param results: list of (filename, ExtractionResult) tuples
+    :param results: list of (filename_or_relative_path, ExtractionResult) tuples
     :param use_excel: whether to write Excel files (True) or CSV files (False)
     """
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -372,6 +373,7 @@ def write_extraction_results_to_folder(
     for filename, result in results:
         extension = "xlsx" if use_excel else "csv"
         file_path = output_dir / f"{filename}-extracted.{extension}"
+        file_path.parent.mkdir(parents=True, exist_ok=True)
         if use_excel:
             result.write_excel(file_path)
         else:

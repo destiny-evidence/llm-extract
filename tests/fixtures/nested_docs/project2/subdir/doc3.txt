@@ -1,0 +1,4 @@
+Product: Enterprise Widget Ultra
+The most advanced widget with full enterprise features and support.
+Price: $499.99
+Status: In stock
