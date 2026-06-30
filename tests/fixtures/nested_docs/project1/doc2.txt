@@ -1,0 +1,4 @@
+Product: Budget Widget Basic
+An affordable entry-level widget for basic use cases.
+Price: $29.99
+Status: Limited stock
