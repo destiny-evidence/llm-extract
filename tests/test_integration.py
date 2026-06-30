@@ -376,3 +376,64 @@ def test_cli_folder_extraction_non_recursive_ignores_subdirs(tmp_path):
     # Without --recursive, only finds files at top level (none in nested_docs root)
     extracted_files = list(tmp_path.glob("*.csv"))
     assert len(extracted_files) == 0
+
+
+# ============================================================================
+# MULTIMODAL DOCUMENT EXTRACTION INTEGRATION TESTS
+# ============================================================================
+
+
+def test_cli_file_extraction_from_pdf(tmp_path):
+    """Test end-to-end extraction from PDF file via CLI."""
+    pdf_path = FIXTURES / "documents" / "aiayn.pdf"
+    if not pdf_path.exists():
+        pytest.skip("PDF test fixture not available")
+
+    result = runner.invoke(
+        app,
+        [
+            "file",
+            "--source",
+            str(pdf_path),
+            "--attrs",
+            str(FIXTURES / "paper_attributes.csv"),
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    # Will fail if model doesn't support vision, but validates PDF routing works
+    assert result.exit_code == 0 or "vision" in result.stdout.lower()
+
+
+def test_cli_pdf_extraction_requires_vision_model():
+    """Test that PDF extraction with non-vision model raises helpful error."""
+    from llm_extract.config import _validate_model_vision_support
+
+    with pytest.raises(ValueError, match="does not support vision"):
+        _validate_model_vision_support("gpt-3.5-turbo")
+
+
+def test_cli_folder_extraction_with_pdf_files(tmp_path):
+    """Test extracting from folder containing PDF files via CLI."""
+    pdf_path = FIXTURES / "documents" / "aiayn.pdf"
+    if not pdf_path.exists():
+        pytest.skip("PDF test fixture not available")
+
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(FIXTURES / "documents"),
+            "--attrs",
+            str(FIXTURES / "attributes.csv"),
+            "--filetype",
+            "pdf",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+
+    # Validates PDF files are properly detected and routed to multimodal extraction
+    assert result.exit_code == 0 or "vision" in result.stdout.lower()

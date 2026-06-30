@@ -3,7 +3,13 @@ from typing import Optional
 
 import typer
 
-from llm_extract.api import extract, extract_folder, SUPPORTED_FILETYPES
+from llm_extract.api import (
+    extract,
+    extract_folder,
+    SUPPORTED_FILETYPES,
+    TEXT_FILETYPES,
+    MULTIMODAL_FILETYPES,
+)
 from llm_extract.config import configure_dspy
 from llm_extract.export import write_extraction_results_to_folder
 from llm_extract.factory import build_attributes_from_sheets
@@ -176,7 +182,7 @@ def folder(
     filetypes: list[str] = typer.Option(
         ["txt"],
         "--filetype",
-        help=f"File type(s) to extract from. Supported: {', '.join(sorted(SUPPORTED_FILETYPES))}",
+        help=f"File type(s) to extract from. Text: {', '.join(sorted(TEXT_FILETYPES))}. Multimodal (requires vision model): {', '.join(sorted(MULTIMODAL_FILETYPES))}",
     ),
     max_concurrent: int = typer.Option(
         8,
