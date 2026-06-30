@@ -1,10 +1,10 @@
 # llm-extract
 
-Extract structured data from text files using large language models. You define the attributes you want to extract in a simple CSV file, and `llm-extract` pulls them out for you.
+Extract structured data from documents using large language models. Supports text files, PDFs, Word docs, PowerPoint slides, and Excel sheets. You define the attributes you want to extract in a simple CSV file, and `llm-extract` pulls them out for you.
 
 ## What it does
 
-Given a text file (or folder of files) and a CSV (or Excel file) describing the attributes you want, `llm-extract` uses an LLM to read the text and return the values.
+Given a document file (or folder of files) and a CSV (or Excel file) describing the attributes you want, `llm-extract` uses an LLM to read the document and return the values. Works with plain text files, markdown, HTML, PDFs, Word documents, PowerPoint slides, and Excel sheets.
 
 **Example text (`sample.txt`):**
 ```
@@ -76,6 +76,8 @@ This installs `llm-extract` as a command available anywhere on your machine.
 | `LLM_EXTRACT_API_KEY` | Your API key |
 | `LLM_EXTRACT_MODEL` | The model to use (e.g. `openai/gpt-4o`) |
 
+**For PDF and document extraction:** use a vision-capable model like `gpt-4o`, `claude-3-5-sonnet-20241022`, or `gemini-2.0-flash`. Regular models (e.g., `gpt-3.5-turbo`) only work with plain text files.
+
 The easiest way is to create a config file in your home directory:
 
 **macOS / Linux** — create `~/.config/llm-extract/.env`:
@@ -146,7 +148,7 @@ This traverses all subdirectories and recreates the folder structure in the outp
 
 | Option | Default | Description |
 |---|---|---|
-| `--filetype` | `txt` | File type(s) to process. Pass multiple times for multiple types: `--filetype txt --filetype md`. Supported: `txt`, `md`. |
+| `--filetype` | `txt` | File type(s) to process. Pass multiple times for multiple types: `--filetype txt --filetype md`. **Text:** `txt`, `md`, `html`. **Multimodal (requires vision model):** `pdf`, `docx`, `pptx`, `xlsx`. |
 | `--max-concurrent` | `8` | Maximum number of concurrent extractions. Use this to control resource usage or respect API rate limits. |
 | `--recursive` | `false` | Recursively traverse subdirectories and preserve directory structure in output. Useful for processing entire projects. |
 
@@ -293,6 +295,40 @@ llm-extract --file paper.txt --attrs template.xlsx --type Study
 ```
 
 Custom types can be referenced from any sheet, but circular references (a type that references itself, directly or indirectly) and references to sheets that don't exist will raise an error.
+
+### Multimodal extraction (PDFs, Word, PowerPoint, Excel)
+
+`llm-extract` can extract from more than just plain text. It supports PDFs, Word documents (`.docx`), PowerPoint presentations (`.pptx`), and Excel sheets (`.xlsx`), plus HTML and Markdown files.
+
+**Requirements:**
+- Use a **vision-capable LLM model** (e.g., `gpt-4o`, `claude-3-5-sonnet`, `gemini-2.0-flash`)
+- Non-vision models (e.g., `gpt-3.5-turbo`) will raise an error if you try to extract from document formats
+
+**How it works:**
+1. `llm-extract` extracts text from the document using intelligent preprocessing
+2. For documents with complex layouts (tables, diagrams, formatted slides), the text extraction quality is checked
+3. If the text is high-quality, it's used directly for extraction
+4. If quality is low, the document page/slide is rendered as an image and sent to the vision model, which can preserve layout and visual context
+
+**Example — extract from a PDF:**
+```bash
+llm-extract file --source research-paper.pdf --attrs fields.csv
+```
+
+**Example — extract from folder of mixed documents:**
+```bash
+llm-extract folder --source ./documents --attrs fields.csv \
+  --filetype pdf --filetype docx --filetype pptx
+```
+
+**Example — extract from Excel sheet:**
+```bash
+llm-extract file --source data.xlsx --attrs fields.csv
+```
+
+Supported document formats:
+- **Text:** `.txt`, `.md`, `.html`
+- **Documents (vision model required):** `.pdf`, `.docx`, `.pptx`, `.xlsx`
 
 ### Examples
 
