@@ -4,7 +4,7 @@ Extract structured data from text files using large language models. You define 
 
 ## What it does
 
-Given a text file and a CSV describing the attributes you want, `llm-extract` uses an LLM to read the text and return the values — with the correct types.
+Given a text file (or folder of files) and a CSV (or Excel file) describing the attributes you want, `llm-extract` uses an LLM to read the text and return the values.
 
 **Example text (`sample.txt`):**
 ```
@@ -20,12 +20,17 @@ price,float,The price of the product in USD as a plain decimal number
 in_stock,bool,Whether the product is currently available
 ```
 
-**Run:**
-```
-llm-extract --file sample.txt --attrs attributes.csv
+**Extract from a single file:**
+```bash
+llm-extract file --source sample.txt --attrs attributes.csv
 ```
 
-**Output:**
+**Extract from a folder of files (concurrently):**
+```bash
+llm-extract folder --source ./documents --attrs attributes.csv
+```
+
+**Example output:**
 ```
 name          value
 product_name  Aeron Chair by Herman Miller
@@ -106,20 +111,35 @@ Your credentials and config files are not affected by an update.
 
 ## Usage
 
+### Extract from a single file
+
 ```bash
-llm-extract --file <text-file> --attrs <attributes-csv>
+llm-extract file --source <text-file> --attrs <attributes-csv>
 ```
 
-### Options
+### Extract from a folder (concurrently)
+
+```bash
+llm-extract folder --source <folder> --attrs <attributes-csv>
+```
+
+### Common options
 
 | Option | Required | Description |
 |---|---|---|
-| `--file` | Yes | Path to the text file to extract from |
+| `--source` | Yes | Path to the text file or folder to extract from |
 | `--attrs` | Yes | Path to the CSV file defining the attributes, or an Excel workbook defining custom types (see [Custom types](#custom-types-excel-templates)) |
 | `--type` | Depends | Name of the top-level sheet to extract. Required when `--attrs` is an Excel workbook. |
 | `--env` | No | Path to a `.env` file (overrides all other credential sources) |
 | `--with-reasoning` | No | Enable chain-of-thought reasoning. Adds a `_reasoning_` row to the output explaining the extraction. Off by default. |
-| `--output` | No | Where to write results. Pass a `.csv` or `.xlsx` file path for an exact destination, or a directory to auto-name the file (`<source>-extracted.csv`, or `.xlsx` when `--attrs` is an Excel template). If omitted, results are printed to the console. |
+| `--output` | No | **File mode:** Where to write results. Pass a `.csv` or `.xlsx` file path, or a directory to auto-name the file. If omitted, results print to console. **Folder mode:** Directory to write results to. Each file becomes `<filename>-extracted.csv` or `.xlsx`. Defaults to `<source>-extracted/` in the same parent directory. |
+
+### Folder-only options
+
+| Option | Default | Description |
+|---|---|---|
+| `--filetype` | `txt` | File type(s) to process. Pass multiple times for multiple types: `--filetype txt --filetype md`. Supported: `txt`, `md`. |
+| `--max-concurrent` | `8` | Maximum number of concurrent extractions. Use this to control resource usage or respect API rate limits. |
 
 ### Output format
 
@@ -267,39 +287,50 @@ Custom types can be referenced from any sheet, but circular references (a type t
 
 ### Examples
 
-Print results to the console:
+**Single file — print to console:**
 ```bash
-llm-extract --file paper.txt --attrs fields.csv
+llm-extract file --source paper.txt --attrs fields.csv
 ```
 
-Save to a specific file:
+**Single file — save to CSV:**
 ```bash
-llm-extract --file paper.txt --attrs fields.csv --output results.csv
+llm-extract file --source paper.txt --attrs fields.csv --output results.csv
 ```
 
-Save to a directory (auto-named `paper-extracted.csv`):
+**Single file — save to directory (auto-named):**
 ```bash
-llm-extract --file paper.txt --attrs fields.csv --output /path/to/dir/
+llm-extract file --source paper.txt --attrs fields.csv --output /path/to/dir/
 ```
 
-Extract using an Excel template of custom types:
+**Single file — with Excel template and custom types:**
 ```bash
-llm-extract --file paper.txt --attrs template.xlsx --type Study
+llm-extract file --source paper.txt --attrs template.xlsx --type Study --output results.xlsx
 ```
 
-Save a custom-type extraction to a multi-sheet Excel workbook:
+**Folder — extract all .txt files concurrently:**
 ```bash
-llm-extract --file paper.txt --attrs template.xlsx --type Study --output results.xlsx
+llm-extract folder --source ./documents --attrs fields.csv
+```
+Results are written to `./documents-extracted/` with one file per result.
+
+**Folder — extract multiple file types:**
+```bash
+llm-extract folder --source ./documents --attrs fields.csv --filetype txt --filetype md
 ```
 
-Use chain-of-thought reasoning:
+**Folder — custom concurrency and output:**
 ```bash
-llm-extract --file paper.txt --attrs fields.csv --with-reasoning
+llm-extract folder --source ./documents --attrs fields.csv --max-concurrent 4 --output ./results/
 ```
 
-Use a specific `.env` file for credentials:
+**Any mode — use chain-of-thought reasoning:**
 ```bash
-llm-extract --file paper.txt --attrs fields.csv --env /path/to/.env
+llm-extract file --source paper.txt --attrs fields.csv --with-reasoning
+```
+
+**Any mode — use a specific `.env` file:**
+```bash
+llm-extract folder --source ./docs --attrs fields.csv --env /path/to/.env
 ```
 
 ---
