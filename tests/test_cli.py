@@ -135,7 +135,7 @@ def test_file_happy_path(source_file, attrs_file, mock_pipeline) -> None:
     mock_pipeline["configure"].assert_called_once_with(env_file=None)
     mock_pipeline["load"].assert_called_once_with(attrs_file)
     mock_pipeline["extract"].assert_called_once_with(
-        "Some product description text.",
+        source_file,
         mock_pipeline["load"].return_value,
         with_reasoning=False,
     )
@@ -174,7 +174,7 @@ def test_file_with_reasoning(source_file, attrs_file, mock_pipeline) -> None:
 
     assert result.exit_code == 0
     mock_pipeline["extract"].assert_called_once_with(
-        "Some product description text.",
+        source_file,
         mock_pipeline["load"].return_value,
         with_reasoning=True,
     )
@@ -360,7 +360,7 @@ def test_file_with_excel_attrs_and_type(
         mock_excel_pipeline["load_sheets"].return_value, "Study"
     )
     mock_excel_pipeline["extract"].assert_called_once_with(
-        "Some product description text.",
+        source_file,
         mock_excel_pipeline["build"].return_value,
         with_reasoning=False,
     )

@@ -3,7 +3,7 @@ from typing import Optional
 
 import typer
 
-from llm_extract.api import extract, extract_folder
+from llm_extract.api import extract, extract_folder, SUPPORTED_FILETYPES
 from llm_extract.config import configure_dspy
 from llm_extract.export import write_extraction_results_to_folder
 from llm_extract.factory import build_attributes_from_sheets
@@ -12,7 +12,6 @@ from llm_extract.loader import load_attributes_csv, load_workbook_sheets
 app = typer.Typer()
 
 EXCEL_SUFFIXES = {".xlsx", ".xlsm"}
-SUPPORTED_FILETYPES = {"txt", "md"}
 
 
 def _load_attributes(attrs: Path, root_type: Optional[str]) -> list:
@@ -114,11 +113,11 @@ def file(
         writable=True,
     ),
 ) -> None:
-    """Extract structured attributes from a single text file."""
+    """Extract structured attributes from a single file (text or PDF)."""
     configure_dspy(env_file=env_file)
     attributes = _load_attributes(attrs, root_type)
 
-    result = extract(source.read_text(), attributes, with_reasoning=with_reasoning)
+    result = extract(source, attributes, with_reasoning=with_reasoning)
     if output is None:
         result.display()
     else:
@@ -200,7 +199,7 @@ def folder(
         writable=True,
     ),
 ) -> None:
-    """Extract structured attributes from multiple text files in a folder."""
+    """Extract structured attributes from multiple files in a folder (text or PDF)."""
     configure_dspy(env_file=env_file)
     attributes = _load_attributes(attrs, root_type)
     filetypes = _validate_filetypes(filetypes)

@@ -40,26 +40,30 @@ def _load_env(env_file: Optional[Path] = None) -> None:
 
 @cache
 def get_llm(
-    model: Optional[str] = None, cache: bool = True, temperature: float = 0.5
+    model: Optional[str] = None, cache: bool = True, temperature: Optional[float] = None
 ) -> dspy.LM:
     """
     Create a DSPy Language model object from environment variables.
 
     :param model: model endpoint of the provider
     :param cache: whether the model responses should be cached
-    :param temperature: the temperature the model should be ran at
+    :param temperature: the temperature the model should be ran at (None uses model default)
     :return: a dspy.LM object
     """
     if model is None:
         model = os.environ["LLM_EXTRACT_MODEL"]
-    lm = dspy.LM(
-        model=model,
-        api_base=os.environ["LLM_EXTRACT_API_BASE"],
-        api_key=os.environ["LLM_EXTRACT_API_KEY"],
-        cache=cache,
-        temperature=temperature,
-    )
-    result = lm("Say: 'hello world'", temperature=0.0)
+
+    kwargs = {
+        "model": model,
+        "api_base": os.environ["LLM_EXTRACT_API_BASE"],
+        "api_key": os.environ["LLM_EXTRACT_API_KEY"],
+        "cache": cache,
+    }
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+
+    lm = dspy.LM(**kwargs)
+    result = lm("Say: 'hello world'")
     assert "hello world" in result[0].lower(), result
     return lm
 
