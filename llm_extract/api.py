@@ -7,17 +7,17 @@ from llm_extract.models import Attribute
 from llm_extract.factory import extraction_signature_builder
 from llm_extract.export import ExtractionResult
 from llm_extract.modules import Extract
-from llm_extract.document_processor import document_to_mixed
+from llm_extract.document_processor import pdf_to_mixed_document
 
 TEXT_FILETYPES = {"txt", "md", "html"}
-MULTIMODAL_FILETYPES = {"pdf", "docx", "pptx", "xlsx"}
+MULTIMODAL_FILETYPES = {"pdf"}
 SUPPORTED_FILETYPES = TEXT_FILETYPES | MULTIMODAL_FILETYPES
 
 
 def _load_source(path: Path) -> Union[str, list]:
-    """Load source content from file, handling multiple document formats."""
-    if path.suffix.lower().lstrip(".") in MULTIMODAL_FILETYPES:
-        return document_to_mixed(path).pages
+    """Load source content from file, handling PDFs and text files."""
+    if path.suffix.lower() == ".pdf":
+        return pdf_to_mixed_document(path).pages
     else:
         return path.read_text()
 
@@ -26,10 +26,11 @@ def extract(
     source: Path, attributes: list[Attribute], with_reasoning: bool = False
 ) -> ExtractionResult:
     """
-    Extract structured attributes from a source file (text or document).
+    Extract structured attributes from a source file (text or PDF).
 
-    Automatically handles text files (txt, md, html) and documents (pdf, docx, pptx, xlsx),
-    converting documents to mixed text/image representations when needed.
+    Automatically handles text files (txt, md, html) and PDFs, converting PDFs
+    to mixed text/image representations (text for readable pages, images for
+    complex layouts like diagrams and tables).
 
     :param source: path to the source file to extract attributes from
     :param attributes: list of attributes defining what to extract
@@ -61,13 +62,13 @@ def extract_folder(
 
     Processes multiple file types by iterating through provided filetypes,
     collecting results across all matches. Automatically handles text files
-    (txt, md, html) and documents (pdf, docx, pptx, xlsx), converting documents
-    to mixed text/image representations. Can optionally traverse subdirectories
-    recursively while preserving the directory structure in result names.
+    (txt, md, html) and PDFs, converting PDFs to mixed text/image representations.
+    Can optionally traverse subdirectories recursively while preserving the
+    directory structure in result names.
 
     :param folder_path: path to folder containing files
     :param attributes: list of attributes defining what to extract
-    :param filetypes: list of file types to extract (e.g., ["txt", "md", "pdf", "docx"])
+    :param filetypes: list of file types to extract (e.g., ["txt", "md", "pdf"])
     :param with_reasoning: whether to use chain-of-thought reasoning
     :param max_concurrent: maximum number of concurrent extractions (default 8)
     :param recursive: whether to recursively traverse subdirectories (default False)

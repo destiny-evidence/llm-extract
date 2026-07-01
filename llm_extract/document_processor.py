@@ -7,8 +7,7 @@ from pathlib import Path
 from typing import Union
 
 import dspy
-import markitdown
-from PIL import Image as PILImage
+import pdfplumber
 
 
 @dataclass
@@ -18,7 +17,6 @@ class MixedDocument:
     pages: list[Union[str, dspy.Image]]
     text_page_count: int = 0
     image_page_count: int = 0
-    source_type: str = "unknown"
 
 
 def is_high_quality_text(
@@ -33,10 +31,10 @@ def is_high_quality_text(
     - Word length statistics: flags nonsensical character sequences
     - Whitespace ratio: detects mostly-blank pages or diagram-heavy content
 
-    :param text: extracted text from document
+    :param text: extracted text from PDF page
     :param min_coverage: minimum ratio of valid characters to total characters
     :param max_whitespace: maximum ratio of whitespace to reject (e.g., 0.8 = 80% whitespace)
-    :return: True if text should be used; False if fallback to image is needed
+    :return: True if text should be used; False if page should be rendered to image
     """
     if not text or len(text.strip()) < 10:
         return False
@@ -68,90 +66,71 @@ def is_high_quality_text(
     if whitespace_ratio > max_whitespace:
         return False
 
-    # Heuristic 5: Markdown table detection (preserve layout)
-    # Markdown tables are better handled as images to preserve structure
-    if "|" in text and re.search(r"\|.*\|", text):
-        return False
+    # Heuristic 5: Layout preservation check (detect likely tables/structured content)
+    # If we see patterns suggesting structured data (multiple aligned spaces, pipes, etc.),
+    # it's safer to use the image to preserve layout
+    structured_patterns = [
+        r"\|.*\|",  # pipe-delimited columns
+        r"---+\s+---+",  # markdown/ASCII tables
+        r"^\s{4,}\S+\s{4,}\S+",  # multiple indented columns on same line
+    ]
+    for pattern in structured_patterns:
+        if re.search(pattern, text, re.MULTILINE):
+            return False
 
     return True
 
 
-def file_to_image_url(
-    file_path: Path, page_num: int | None = None, temp_dir: str | None = None
-) -> str:
+def render_page_to_image(page: pdfplumber.PDF, temp_dir: str, dpi: int = 150) -> str:
     """
-    Convert a document or image file to base64 data URL.
+    Render a pdfplumber page to PNG and return base64 data URL.
 
-    :param file_path: path to the file
-    :param page_num: page number (for logging/naming)
-    :param temp_dir: temporary directory to store rendered image
-    :return: base64 data URL for the image
+    :param page: pdfplumber page object
+    :param temp_dir: temporary directory for storing image files
+    :param dpi: resolution for rendering (default 150)
+    :return: base64 data URL for the rendered image
     """
-    if temp_dir is None:
-        temp_dir = tempfile.gettempdir()
-
-    # If it's already an image, just encode it
-    if file_path.suffix.lower() in {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}:
-        with open(file_path, "rb") as f:
-            image_data = base64.b64encode(f.read()).decode("utf-8")
-        return f"data:image/{file_path.suffix.lstrip('.')};base64,{image_data}"
-
-    # Otherwise render document to image using Pillow
-    try:
-        img = PILImage.open(str(file_path))
-        image_path = Path(temp_dir) / f"page_{page_num or 1}.png"
-        img.save(image_path, "PNG")
-        with open(image_path, "rb") as f:
-            image_data = base64.b64encode(f.read()).decode("utf-8")
-        return f"data:image/png;base64,{image_data}"
-    except Exception as e:
-        raise ValueError(f"Could not render {file_path} to image: {e}")
+    image = page.to_image(resolution=dpi)
+    image_path = str(Path(temp_dir) / f"page_{page.page_number}.png")
+    image.save(image_path)
+    with open(image_path, "rb") as f:
+        image_data = base64.b64encode(f.read()).decode("utf-8")
+    return f"data:image/png;base64,{image_data}"
 
 
-def document_to_mixed(file_path: str | Path) -> MixedDocument:
+def pdf_to_mixed_document(pdf_path: str | Path) -> MixedDocument:
     """
-    Convert a document to a MixedDocument containing text and/or images.
+    Convert a PDF to a MixedDocument containing text and/or images.
 
-    Uses markitdown for text extraction. If extraction quality is low, falls
-    back to rendering the document as images.
+    For each page, attempts to extract text. If the extracted text passes
+    quality checks, uses it; otherwise renders the page to an image.
 
-    :param file_path: path to the document file
-    :return: MixedDocument with pages and metadata
+    This hybrid approach optimizes costs by using text extraction when reliable,
+    and falling back to image rendering only when necessary.
+
+    :param pdf_path: path to the PDF file
+    :return: MixedDocument with pages and page count metadata
     """
-    file_path = Path(file_path)
-
-    # Extract using markitdown
-    try:
-        converter = markitdown.MarkItDown()
-        result = converter.convert_local(str(file_path))
-        md_content = result.text_content
-    except Exception as e:
-        raise ValueError(f"Failed to extract {file_path}: {e}")
-
+    pdf_path = Path(pdf_path)
     pages: list[Union[str, dspy.Image]] = []
     text_page_count = 0
     image_page_count = 0
 
-    # Markitdown converts entire document to markdown in one go
-    # (already handles multi-page documents)
-    if is_high_quality_text(md_content):
-        pages.append(md_content)
-        text_page_count = 1
-    else:
-        # Fall back to rendering as image
-        with tempfile.TemporaryDirectory() as temp_dir:
-            try:
-                image_url = file_to_image_url(file_path, page_num=1, temp_dir=temp_dir)
-                pages.append(dspy.Image(url=image_url))
-                image_page_count = 1
-            except ValueError:
-                # If rendering fails, use markdown anyway (better than nothing)
-                pages.append(md_content)
-                text_page_count = 1
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text()
+
+                if is_high_quality_text(text):
+                    pages.append(text)
+                    text_page_count += 1
+                else:
+                    image_url = render_page_to_image(page, temp_dir)
+                    pages.append(dspy.Image(url=image_url))
+                    image_page_count += 1
 
     return MixedDocument(
         pages=pages,
         text_page_count=text_page_count,
         image_page_count=image_page_count,
-        source_type=file_path.suffix.lstrip(".").lower(),
     )

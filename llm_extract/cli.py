@@ -7,8 +7,6 @@ from llm_extract.api import (
     extract,
     extract_folder,
     SUPPORTED_FILETYPES,
-    TEXT_FILETYPES,
-    MULTIMODAL_FILETYPES,
 )
 from llm_extract.config import configure_dspy
 from llm_extract.export import write_extraction_results_to_folder
@@ -182,7 +180,7 @@ def folder(
     filetypes: list[str] = typer.Option(
         ["txt"],
         "--filetype",
-        help=f"File type(s) to extract from. Text: {', '.join(sorted(TEXT_FILETYPES))}. Multimodal (requires vision model): {', '.join(sorted(MULTIMODAL_FILETYPES))}",
+        help=f"File type(s) to extract from. Supported: {', '.join(sorted(SUPPORTED_FILETYPES))}. PDF extraction requires a vision-capable model.",
     ),
     max_concurrent: int = typer.Option(
         8,

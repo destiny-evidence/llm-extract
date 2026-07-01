@@ -61,13 +61,11 @@ class TestMixedDocumentStructure:
             pages=["page 1", "page 2"],
             text_page_count=2,
             image_page_count=0,
-            source_type="txt",
         )
 
         assert doc.text_page_count == 2
         assert doc.image_page_count == 0
         assert len(doc.pages) == 2
-        assert doc.source_type == "txt"
 
     def test_mixed_document_defaults(self):
         """MixedDocument should have sensible defaults."""
@@ -75,7 +73,6 @@ class TestMixedDocumentStructure:
 
         assert doc.text_page_count == 0
         assert doc.image_page_count == 0
-        assert doc.source_type == "unknown"
 
     def test_page_counts_consistency(self):
         """Total pages should equal sum of text and image pages."""
