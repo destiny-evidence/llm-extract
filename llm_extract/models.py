@@ -39,8 +39,10 @@ def string_to_type(
     """
     type_context = type_context or {}
     # Strip quoted contents (e.g. Literal["a", "b"]) so literal values aren't
-    # mistaken for disallowed type identifiers.
-    without_string_literals = re.sub(r"'[^']*'|\"[^\"]*\"", "", string)
+    # mistaken for disallowed type identifiers. Handles both straight and smart quotes.
+    without_string_literals = re.sub(
+        "['\"\\u201c\\u201d][^'\"]*['\"\\u201c\\u201d]", "", string
+    )
     identifiers = set(re.findall(r"[a-zA-Z]\w*", without_string_literals))
     allowed = ALLOWED_TYPES | set(type_context)
     if not identifiers <= allowed:

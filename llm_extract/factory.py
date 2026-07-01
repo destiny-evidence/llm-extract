@@ -49,63 +49,32 @@ def fields_builder(
     multimodal: bool = False,
 ) -> tuple[dict[str, FieldInfo], dict[str, TypeExpr]]:
     """
-    Build DSPy field definitions and type annotations from a list of attributes.
+    Build DSPy input/output fields from a list of attributes.
 
-    :param attrs: list of attributes to convert into DSPy fields
-    :param multimodal: if True, source field accepts Union[str, list[Union[str, dspy.Image]]]
-    :return: tuple of (fields dict, annotations dict) ready for signature construction
+    :param attrs: list of attributes
+    :param multimodal: if True, source field accepts mixed text/image content
+    :return: tuple of (fields dict, annotations dict)
     """
-    source_desc = "The source to extract attributes from."
-    if multimodal:
-        source_type = Union[str, list[Union[str, dspy.Image]]]
-    else:
-        source_type = str
+    source_type = Union[str, list[Union[str, dspy.Image]]] if multimodal else str
+    fields = {
+        "source": dspy.InputField(
+            description="The source material to extract attributes from."
+        )
+    }
+    annotations = {"source": source_type}
 
-    fields = {"source": dspy.InputField(desc=source_desc)}
-    type_hints = {"source": source_type}
     for attr in attrs:
-        fields[attr.name] = dspy.OutputField(desc=attr.description)
-        type_hints[attr.name] = attr.attr_type
-    return fields, type_hints
+        fields[attr.name] = dspy.OutputField(description=attr.description)
+        annotations[attr.name] = attr.attr_type
 
-
-def build_attributes_from_sheets(
-    sheets: dict[str, list[dict]], root_sheet: str
-) -> list[Attribute]:
-    """
-    Build the attributes for a top-level type from parsed workbook sheets.
-
-    Each sheet represents a user-defined custom type. A field's type may
-    reference another sheet by name, in which case that sheet is recursively
-    resolved into a nested dataclass.
-
-    :param sheets: dict mapping sheet name to a list of row dicts, as returned
-        by load_workbook_sheets
-    :param root_sheet: name of the sheet defining the top-level type to extract
-    :return: list of parsed Attribute objects for the root sheet
-    """
-    if root_sheet not in sheets:
-        raise UnknownCustomTypeError(f"No sheet named '{root_sheet}' was found.")
-    return _resolve_attributes(
-        root_sheet,
-        sheets,
-        building={root_sheet},
-        resolved={},
-        disallowed_names=DISALLOWED_NAMES,
-    )
+    return fields, annotations
 
 
 def _custom_type_names(type_str: str) -> set[str]:
-    """
-    Extract identifiers from a type expression that refer to user-defined types.
-
-    :param type_str: type expression string, e.g. 'list[Author]' or 'str'
-    :return: set of identifiers in the expression that are not built-in allowed types
-    """
-    # Strip quoted contents (e.g. Literal["a", "b"]) so literal values aren't
-    # mistaken for custom-type sheet references.
-    without_string_literals = re.sub(r"'[^']*'|\"[^\"]*\"", "", type_str)
-    return set(re.findall(r"[a-zA-Z]\w*", without_string_literals)) - ALLOWED_TYPES
+    """Extract identifiers from type expression that may refer to custom types."""
+    # Handle both ASCII and Unicode smart quotes
+    without_quotes = re.sub(r'[\'""“”][^\'"]*[\'""“”]', "", type_str)
+    return set(re.findall(r"[a-zA-Z]\w*", without_quotes)) - ALLOWED_TYPES
 
 
 def _resolve_attributes(
@@ -125,10 +94,9 @@ def _resolve_attributes(
     :param sheets: dict mapping sheet name to a list of row dicts
     :param building: set of sheet names currently being resolved, used to
         detect circular type references
-    :param resolved: cache of sheet name to already-built type, used to avoid
-        rebuilding shared custom types
-    :param disallowed_names: set of reserved names that cannot be used as attribute names
-    :return: list of parsed Attribute objects for the sheet
+    :param resolved: dict of sheet names to their resolved TypeExpr dataclass
+    :param disallowed_names: set of names that cannot be used as attribute names
+    :return: list of Attribute objects
     """
     attrs = []
     for row in sheets[sheet_name]:
@@ -137,19 +105,21 @@ def _resolve_attributes(
             for name in _custom_type_names(row["type"])
         }
         try:
-            attrs.append(
-                Attribute.from_csv_row(
-                    row, disallowed_names=disallowed_names, type_context=type_context
-                )
+            attr = Attribute.from_csv_row(
+                row,
+                disallowed_names=disallowed_names,
+                type_context=type_context,
             )
-        except (
-            AttributeTypeConversionError,
-            CannotCreateAttributeWithDisallowedNameError,
-        ) as exc:
+            attrs.append(attr)
+        except AttributeTypeConversionError as e:
             raise LoadingAttributesFromExcelError(
-                f"Failed to load attribute '{row.get('name')}' from sheet "
-                f"'{sheet_name}': {exc}"
+                f"In sheet '{sheet_name}': {e.args[0]}"
             )
+        except CannotCreateAttributeWithDisallowedNameError as e:
+            raise LoadingAttributesFromExcelError(
+                f"In sheet '{sheet_name}': {e.args[0]}"
+            )
+
     return attrs
 
 
@@ -160,17 +130,15 @@ def _build_type(
     resolved: dict[str, TypeExpr],
 ) -> TypeExpr:
     """
-    Build (or retrieve from cache) a pydantic dataclass for a custom type sheet.
+    Build a type for a custom type (sheet) reference.
 
-    :param sheet_name: name of the sheet defining the custom type
-    :param sheets: dict mapping sheet name to a list of row dicts
-    :param building: set of sheet names currently being resolved, used to
-        detect circular type references
-    :param resolved: cache of sheet name to already-built type; updated in
-        place with the newly built type before returning
-    :return: a pydantic dataclass type built from the sheet's fields
-    :raises UnknownCustomTypeError: if no sheet named sheet_name exists
-    :raises CircularTypeReferenceError: if sheet_name is already being resolved
+    Recursively resolves any other custom types that the target sheet references.
+
+    :param sheet_name: name of the sheet to build a type for
+    :param sheets: dict of all sheets
+    :param building: set of sheet names currently in progress (to detect cycles)
+    :param resolved: dict of already-resolved sheet names to their TypeExpr
+    :return: the TypeExpr for the resolved sheet
     """
     if sheet_name in resolved:
         return resolved[sheet_name]
@@ -186,9 +154,35 @@ def _build_type(
     building.discard(sheet_name)
 
     fields = [
-        (attr.name, attr.attr_type, Field(default=None, description=attr.description))
+        (attr.name, attr.attr_type, Field(description=attr.description))
         for attr in attrs
     ]
-    cls = pydantic_dataclass(make_dataclass(sheet_name, fields))
-    resolved[sheet_name] = cls
-    return cls
+
+    resolved[sheet_name] = pydantic_dataclass(make_dataclass(sheet_name, fields))
+    return resolved[sheet_name]
+
+
+def build_attributes_from_sheets(
+    sheets: dict[str, list[dict]], root_sheet: str = "Query"
+) -> list[Attribute]:
+    """
+    Build a list of attributes from a workbook.
+
+    Each sheet in the workbook defines a type: the sheet name is the type name,
+    and each row in the sheet is a field in that type.
+
+    :param sheets: dict mapping sheet name to list of row dicts
+    :param root_sheet: name of the top-level sheet to extract
+    :return: list of Attribute objects
+    :raises UnknownCustomTypeError: if root_sheet or any referenced sheet doesn't exist
+    :raises CircularTypeReferenceError: if sheets reference each other in a cycle
+    """
+    if root_sheet not in sheets:
+        raise UnknownCustomTypeError(f"No sheet named '{root_sheet}' was found.")
+    return _resolve_attributes(
+        root_sheet,
+        sheets,
+        building={root_sheet},
+        resolved={},
+        disallowed_names=DISALLOWED_NAMES,
+    )
