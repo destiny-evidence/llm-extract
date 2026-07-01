@@ -1,4 +1,6 @@
+import builtins
 import re
+import typing
 from dataclasses import make_dataclass
 from typing import Union
 
@@ -17,9 +19,27 @@ from llm_extract.exceptions import (
     UnknownCustomTypeError,
 )
 
+QUOTED_STRING_PATTERN = r"['\"“”][^'\"]*['\"“”]"
+
 EXTRACTION_SIGNATURE_DOCSTRING = (
     "Extract the attributes from the source where available."
 )
+
+
+def string_to_type(
+    string: str, type_context: dict[str, TypeExpr] | None = None
+) -> TypeExpr:
+    """Parse a type expression string into a Python type wrapped in Optional."""
+    type_context = type_context or {}
+    without_string_literals = re.sub(QUOTED_STRING_PATTERN, "", string)
+    identifiers = set(re.findall(r"[a-zA-Z]\w*", without_string_literals))
+    allowed = ALLOWED_TYPES | set(type_context)
+    if not identifiers <= allowed:
+        raise ValueError(f"Disallowed types: {identifiers - allowed}")
+    return eval(
+        f"Optional[{string}]",
+        {**vars(typing), **vars(builtins), **type_context},
+    )
 
 
 def extraction_signature_builder(
@@ -72,8 +92,7 @@ def fields_builder(
 
 def _custom_type_names(type_str: str) -> set[str]:
     """Extract identifiers from type expression that may refer to custom types."""
-    # Handle both ASCII and Unicode smart quotes
-    without_quotes = re.sub(r'[\'""“”][^\'"]*[\'""“”]', "", type_str)
+    without_quotes = re.sub(QUOTED_STRING_PATTERN, "", type_str)
     return set(re.findall(r"[a-zA-Z]\w*", without_quotes)) - ALLOWED_TYPES
 
 

@@ -1,6 +1,7 @@
 import typing
 import pytest
-from llm_extract.models import Attribute, string_to_type
+from llm_extract.models import Attribute
+from llm_extract.factory import string_to_type
 from llm_extract.exceptions import (
     AttributeTypeConversionError,
     CannotCreateAttributeWithDisallowedNameError,
