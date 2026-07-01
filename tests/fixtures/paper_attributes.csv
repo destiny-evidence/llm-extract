@@ -1,0 +1,8 @@
+name,type,description
+title,str,The title of the research paper
+authors,list[str],List of author names
+publication_year,int,The year the paper was published
+main_contribution,str,The main contribution or innovation introduced in the paper
+model_name,str,The name of the proposed model or architecture
+keywords,list[str],Key technical terms or concepts introduced
+abstract_summary,str,A brief summary of what the paper is about

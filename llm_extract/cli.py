@@ -3,7 +3,11 @@ from typing import Optional
 
 import typer
 
-from llm_extract.api import extract, extract_folder
+from llm_extract.api import (
+    extract,
+    extract_folder,
+    SUPPORTED_FILETYPES,
+)
 from llm_extract.config import configure_dspy
 from llm_extract.export import write_extraction_results_to_folder
 from llm_extract.factory import build_attributes_from_sheets
@@ -12,7 +16,6 @@ from llm_extract.loader import load_attributes_csv, load_workbook_sheets
 app = typer.Typer()
 
 EXCEL_SUFFIXES = {".xlsx", ".xlsm"}
-SUPPORTED_FILETYPES = {"txt", "md"}
 
 
 def _load_attributes(attrs: Path, root_type: Optional[str]) -> list:
@@ -114,11 +117,12 @@ def file(
         writable=True,
     ),
 ) -> None:
-    """Extract structured attributes from a single text file."""
-    configure_dspy(env_file=env_file)
+    """Extract structured attributes from a single file (text or PDF)."""
+    is_pdf = source.suffix.lower() == ".pdf"
+    configure_dspy(env_file=env_file, multimodal=is_pdf)
     attributes = _load_attributes(attrs, root_type)
 
-    result = extract(source.read_text(), attributes, with_reasoning=with_reasoning)
+    result = extract(source, attributes, with_reasoning=with_reasoning)
     if output is None:
         result.display()
     else:
@@ -176,7 +180,7 @@ def folder(
     filetypes: list[str] = typer.Option(
         ["txt"],
         "--filetype",
-        help=f"File type(s) to extract from. Supported: {', '.join(sorted(SUPPORTED_FILETYPES))}",
+        help=f"File type(s) to extract from. Supported: {', '.join(sorted(SUPPORTED_FILETYPES))}. PDF extraction requires a vision-capable model.",
     ),
     max_concurrent: int = typer.Option(
         8,
@@ -200,10 +204,11 @@ def folder(
         writable=True,
     ),
 ) -> None:
-    """Extract structured attributes from multiple text files in a folder."""
-    configure_dspy(env_file=env_file)
-    attributes = _load_attributes(attrs, root_type)
+    """Extract structured attributes from multiple files in a folder (text or PDF)."""
     filetypes = _validate_filetypes(filetypes)
+    has_pdf = "pdf" in filetypes
+    configure_dspy(env_file=env_file, multimodal=has_pdf)
+    attributes = _load_attributes(attrs, root_type)
     _validate_output_is_directory(output)
 
     results = extract_folder(

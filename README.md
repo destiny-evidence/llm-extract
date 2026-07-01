@@ -1,10 +1,10 @@
 # llm-extract
 
-Extract structured data from text files using large language models. You define the attributes you want to extract in a simple CSV file, and `llm-extract` pulls them out for you.
+Extract structured data from text files and PDFs using large language models. You define the attributes you want to extract in a simple CSV file, and `llm-extract` pulls them out for you.
 
 ## What it does
 
-Given a text file (or folder of files) and a CSV (or Excel file) describing the attributes you want, `llm-extract` uses an LLM to read the text and return the values.
+Given a text file or PDF (or folder of files) and a CSV (or Excel file) describing the attributes you want, `llm-extract` uses an LLM to read the document and return the values. Works with plain text files, markdown, HTML, and PDFs.
 
 **Example text (`sample.txt`):**
 ```
@@ -76,6 +76,8 @@ This installs `llm-extract` as a command available anywhere on your machine.
 | `LLM_EXTRACT_API_KEY` | Your API key |
 | `LLM_EXTRACT_MODEL` | The model to use (e.g. `openai/gpt-4o`) |
 
+**For PDF extraction:** use a vision-capable model like `gpt-4o`, `claude-3-5-sonnet-20241022`, or `gemini-2.0-flash`. Regular models (e.g., `gpt-3.5-turbo`) only work with plain text files.
+
 The easiest way is to create a config file in your home directory:
 
 **macOS / Linux** — create `~/.config/llm-extract/.env`:
@@ -146,7 +148,7 @@ This traverses all subdirectories and recreates the folder structure in the outp
 
 | Option | Default | Description |
 |---|---|---|
-| `--filetype` | `txt` | File type(s) to process. Pass multiple times for multiple types: `--filetype txt --filetype md`. Supported: `txt`, `md`. |
+| `--filetype` | `txt` | File type(s) to process. Pass multiple times for multiple types: `--filetype txt --filetype md --filetype pdf`. Supported: `txt`, `md`, `html`, `pdf` (requires vision model). |
 | `--max-concurrent` | `8` | Maximum number of concurrent extractions. Use this to control resource usage or respect API rate limits. |
 | `--recursive` | `false` | Recursively traverse subdirectories and preserve directory structure in output. Useful for processing entire projects. |
 
@@ -293,6 +295,40 @@ llm-extract --file paper.txt --attrs template.xlsx --type Study
 ```
 
 Custom types can be referenced from any sheet, but circular references (a type that references itself, directly or indirectly) and references to sheets that don't exist will raise an error.
+
+### PDF extraction (multimodal)
+
+`llm-extract` can extract from PDFs in addition to plain text. Each PDF page is intelligently processed to optimize costs:
+
+**Requirements:**
+- Use a **vision-capable LLM model** (e.g., `gpt-4o`, `claude-3-5-sonnet`, `gemini-2.0-flash`)
+- Non-vision models (e.g., `gpt-3.5-turbo`) will raise an error if you try to extract from PDFs
+
+**How it works:**
+1. PDFs are processed page-by-page using pdfplumber
+2. For each page, `llm-extract` attempts to extract text
+3. If the text extraction quality is high (readable text), it's used directly for extraction (cost-efficient)
+4. If the text quality is low (diagrams, complex tables, unreadable layout), the page is rendered as an image and sent to the vision model
+5. This hybrid approach optimizes costs by using text whenever possible, and images only when necessary
+
+**For Word/PowerPoint/Excel files:** Convert them to PDF first (using your preferred tool), then extract from the PDF.
+
+**Examples:**
+
+Extract from a PDF:
+```bash
+llm-extract file --source research-paper.pdf --attrs fields.csv
+```
+
+Extract from folder of PDFs and text files:
+```bash
+llm-extract folder --source ./documents --attrs fields.csv \
+  --filetype txt --filetype pdf
+```
+
+Supported formats:
+- **Text:** `.txt`, `.md`, `.html`
+- **PDF (requires vision model):** `.pdf`
 
 ### Examples
 

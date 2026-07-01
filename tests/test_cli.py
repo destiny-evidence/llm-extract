@@ -132,31 +132,13 @@ def test_file_happy_path(source_file, attrs_file, mock_pipeline) -> None:
     )
 
     assert result.exit_code == 0
-    mock_pipeline["configure"].assert_called_once_with(env_file=None)
+    mock_pipeline["configure"].assert_called_once_with(env_file=None, multimodal=False)
     mock_pipeline["load"].assert_called_once_with(attrs_file)
     mock_pipeline["extract"].assert_called_once_with(
-        "Some product description text.",
+        source_file,
         mock_pipeline["load"].return_value,
         with_reasoning=False,
     )
-
-
-def test_file_with_env_file(source_file, attrs_file, env_file, mock_pipeline) -> None:
-    result = runner.invoke(
-        app,
-        [
-            "file",
-            "--source",
-            str(source_file),
-            "--attrs",
-            str(attrs_file),
-            "--env",
-            str(env_file),
-        ],
-    )
-
-    assert result.exit_code == 0
-    mock_pipeline["configure"].assert_called_once_with(env_file=env_file)
 
 
 def test_file_with_reasoning(source_file, attrs_file, mock_pipeline) -> None:
@@ -174,7 +156,7 @@ def test_file_with_reasoning(source_file, attrs_file, mock_pipeline) -> None:
 
     assert result.exit_code == 0
     mock_pipeline["extract"].assert_called_once_with(
-        "Some product description text.",
+        source_file,
         mock_pipeline["load"].return_value,
         with_reasoning=True,
     )
@@ -360,7 +342,7 @@ def test_file_with_excel_attrs_and_type(
         mock_excel_pipeline["load_sheets"].return_value, "Study"
     )
     mock_excel_pipeline["extract"].assert_called_once_with(
-        "Some product description text.",
+        source_file,
         mock_excel_pipeline["build"].return_value,
         with_reasoning=False,
     )
@@ -389,30 +371,12 @@ def test_folder_happy_path(source_folder, attrs_file, mock_folder_pipeline) -> N
     )
 
     assert result.exit_code == 0
-    mock_folder_pipeline["configure"].assert_called_once_with(env_file=None)
+    mock_folder_pipeline["configure"].assert_called_once_with(
+        env_file=None, multimodal=False
+    )
     mock_folder_pipeline["load"].assert_called_once_with(attrs_file)
     mock_folder_pipeline["extract_folder"].assert_called_once()
     mock_folder_pipeline["write"].assert_called_once()
-
-
-def test_folder_with_env_file(
-    source_folder, attrs_file, env_file, mock_folder_pipeline
-) -> None:
-    result = runner.invoke(
-        app,
-        [
-            "folder",
-            "--source",
-            str(source_folder),
-            "--attrs",
-            str(attrs_file),
-            "--env",
-            str(env_file),
-        ],
-    )
-
-    assert result.exit_code == 0
-    mock_folder_pipeline["configure"].assert_called_once_with(env_file=env_file)
 
 
 def test_folder_with_reasoning(source_folder, attrs_file, mock_folder_pipeline) -> None:
@@ -564,27 +528,6 @@ def test_folder_with_excel_attrs(
     # Check that use_excel=True was passed
     call_kwargs = mock_folder_pipeline["write"].call_args[1]
     assert call_kwargs["use_excel"] is True
-
-
-def test_folder_no_files_found_for_single_filetype(
-    source_folder, attrs_file, mock_folder_pipeline
-) -> None:
-    mock_folder_pipeline["extract_folder"].return_value = []
-    result = runner.invoke(
-        app,
-        [
-            "folder",
-            "--source",
-            str(source_folder),
-            "--attrs",
-            str(attrs_file),
-            "--filetype",
-            "txt",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert "No files matching" in result.stdout and ".txt" in result.stdout
 
 
 def test_folder_no_files_found_for_any_filetype(

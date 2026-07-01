@@ -1,5 +1,7 @@
 import typing
 import pytest
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from llm_extract.api import extract
 from llm_extract.models import Attribute
@@ -20,34 +22,49 @@ def sample_attrs() -> list[Attribute]:
     ]
 
 
-def test_extract_returns_extraction_result(sample_attrs) -> None:
+@pytest.fixture
+def sample_text_file() -> Path:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        f.write("Some product text.")
+        return Path(f.name)
+
+
+def test_extract_returns_extraction_result(sample_attrs, sample_text_file) -> None:
     with patch("llm_extract.api.Extract") as mock_extract_cls:
         mock_extract_cls.return_value = MagicMock(return_value=MagicMock())
-        result = extract("Some product text.", sample_attrs)
+        result = extract(sample_text_file, sample_attrs)
     assert isinstance(result, ExtractionResult)
     assert result.attributes == sample_attrs
+    sample_text_file.unlink()
 
 
-def test_extract_passes_source_to_extractor(sample_attrs) -> None:
+def test_extract_passes_source_to_extractor(sample_attrs, sample_text_file) -> None:
     with patch("llm_extract.api.Extract") as mock_extract_cls:
         mock_extractor = MagicMock()
         mock_extract_cls.return_value = mock_extractor
-        extract("Some product text.", sample_attrs)
+        extract(sample_text_file, sample_attrs)
     mock_extractor.assert_called_once_with("Some product text.", with_reasoning=False)
+    sample_text_file.unlink()
 
 
-def test_extract_passes_with_reasoning_to_extractor(sample_attrs) -> None:
+def test_extract_passes_with_reasoning_to_extractor(
+    sample_attrs, sample_text_file
+) -> None:
     with patch("llm_extract.api.Extract") as mock_extract_cls:
         mock_extractor = MagicMock()
         mock_extract_cls.return_value = mock_extractor
-        extract("Some product text.", sample_attrs, with_reasoning=True)
+        extract(sample_text_file, sample_attrs, with_reasoning=True)
     mock_extractor.assert_called_once_with("Some product text.", with_reasoning=True)
+    sample_text_file.unlink()
 
 
-def test_extract_builds_signature_from_attributes(sample_attrs) -> None:
+def test_extract_builds_signature_from_attributes(
+    sample_attrs, sample_text_file
+) -> None:
     with (
         patch("llm_extract.api.extraction_signature_builder") as mock_builder,
         patch("llm_extract.api.Extract"),
     ):
-        extract("Some text.", sample_attrs)
-    mock_builder.assert_called_once_with(sample_attrs)
+        extract(sample_text_file, sample_attrs)
+    mock_builder.assert_called_once_with(sample_attrs, multimodal=False)
+    sample_text_file.unlink()
