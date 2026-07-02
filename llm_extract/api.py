@@ -9,6 +9,11 @@ from llm_extract.factory import build_extraction_signature
 from llm_extract.export import ExtractionResult
 from llm_extract.modules import Extract
 
+try:
+    from openai import APITimeoutError
+except ImportError:
+    APITimeoutError = TimeoutError  # fallback for other API providers
+
 
 def extract(
     source: Path,
@@ -59,8 +64,20 @@ def extract(
 
         signature = build_extraction_signature(attributes, multimodal=is_multimodal)
         extractor = Extract(signature)
+
+        try:
+            prediction = extractor(content, with_reasoning=with_reasoning)
+        except APITimeoutError as e:
+            timeout_msg = (
+                f"LLM extraction timed out after the configured timeout period. "
+                f"This often happens with large documents and many extraction fields. "
+                f"Try: (1) reducing the number of fields, (2) increasing LLM_EXTRACT_TIMEOUT "
+                f"environment variable, or (3) splitting the document into smaller chunks."
+            )
+            raise TimeoutError(timeout_msg) from e
+
         result = ExtractionResult(
-            prediction=extractor(content, with_reasoning=with_reasoning),
+            prediction=prediction,
             attributes=attributes,
         )
 

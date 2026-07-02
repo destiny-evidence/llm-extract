@@ -40,7 +40,10 @@ def _load_env(env_file: Optional[Path] = None) -> None:
 
 @cache
 def get_llm(
-    model: Optional[str] = None, cache: bool = True, temperature: Optional[float] = None
+    model: Optional[str] = None,
+    cache: bool = True,
+    temperature: Optional[float] = None,
+    timeout: Optional[int] = None,
 ) -> dspy.LM:
     """
     Create a DSPy Language model object from environment variables.
@@ -48,16 +51,22 @@ def get_llm(
     :param model: model endpoint of the provider
     :param cache: whether the model responses should be cached
     :param temperature: the temperature the model should be ran at (None uses model default)
+    :param timeout: timeout in seconds for LLM API calls (passed to LiteLLM)
     :return: a dspy.LM object
     """
     if model is None:
         model = os.environ["LLM_EXTRACT_MODEL"]
+
+    # Get timeout from parameter, env var, or default to 300 seconds (5 min)
+    if timeout is None:
+        timeout = int(os.environ.get("LLM_EXTRACT_TIMEOUT", "300"))
 
     kwargs = {
         "model": model,
         "api_base": os.environ["LLM_EXTRACT_API_BASE"],
         "api_key": os.environ["LLM_EXTRACT_API_KEY"],
         "cache": cache,
+        "timeout": timeout,
     }
     if temperature is not None:
         kwargs["temperature"] = temperature

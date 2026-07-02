@@ -1,0 +1,9 @@
+name,value
+title,Attention Is All You Need
+authors,"[""Ashish Vaswani"", ""Noam Shazeer"", ""Niki Parmar"", ""Jakob Uszkoreit"", ""Llion Jones"", ""Aidan N. Gomez"", ""Lukasz Kaiser"", ""Illia Polosukhin""]"
+publication_year,2017
+main_contribution,"The paper introduces the Transformer, the first sequence transduction architecture based entirely on attention mechanisms, replacing recurrent and convolutional layers with multi-head self-attention and position-wise feed-forward networks, enabling greater parallelization and state-of-the-art machine translation performance."
+model_name,Transformer
+keywords,"[""Transformer"", ""self-attention"", ""multi-head attention"", ""scaled dot-product attention"", ""sequence transduction"", ""machine translation"", ""encoder-decoder architecture"", ""positional encoding"", ""position-wise feed-forward networks"", ""attention mechanisms""]"
+abstract_summary,"The paper proposes the Transformer, a neural sequence transduction model that relies solely on attention mechanisms instead of recurrent or convolutional networks. It uses stacked self-attention and feed-forward layers in an encoder-decoder architecture, achieving state-of-the-art results on WMT 2014 English-to-German and English-to-French translation tasks while training faster and with better parallelization than prior models."
+_reasoning_,"The source is the full paper ""Attention Is All You Need."" The title, authors, abstract, introduction, architecture, results, and conclusion identify the paper as the 2017 NeurIPS work introducing the Transformer, a sequence transduction architecture based entirely on attention mechanisms rather than recurrence or convolution."

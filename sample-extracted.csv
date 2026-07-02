@@ -1,0 +1,11 @@
+name,value
+product_name,Aeron Chair by Herman Miller
+price,1495.0
+in_stock,True
+category,Furniture
+rating,4.7
+available_sizes,"[28, 30, 32, 34]"
+tag_list,"[""ergonomic"", ""adjustable"", ""premium""]"
+dimension_map,"{""width"": 68.5, ""depth"": 68.5, ""height"": 102.0}"
+current_year,NOT_FOUND
+_reasoning_,"The source identifies the product as the Aeron Chair by Herman Miller, priced at $1,495, currently in stock, in the Furniture category, with a 4.7/5 rating. Available sizes are 28, 30, 32, and 34. Tags are ergonomic, adjustable, and premium. Dimensions are provided in centimeters. No year is specified."
