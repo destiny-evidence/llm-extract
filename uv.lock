@@ -848,7 +848,6 @@ dependencies = [
     { name = "dspy" },
     { name = "openpyxl" },
     { name = "pdfplumber" },
-    { name = "pillow" },
     { name = "pydantic" },
     { name = "typer" },
 ]
@@ -867,7 +866,6 @@ requires-dist = [
     { name = "dspy", specifier = ">=3.2.1" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pdfplumber", specifier = ">=0.10.0" },
-    { name = "pillow", specifier = ">=10.0.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "typer", specifier = ">=0.25.1" },
 ]

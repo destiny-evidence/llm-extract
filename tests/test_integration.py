@@ -6,9 +6,10 @@ import dspy
 import pytest
 from typer.testing import CliRunner
 from llm_extract.config import configure_dspy
-from llm_extract.loader import load_attributes_csv, load_workbook_sheets
+from llm_extract.loader import load_workbook, load_csv
 from llm_extract.factory import (
-    build_attributes_from_sheets,
+    build_attributes_from_workbook,
+    build_attributes_from_csv,
     extraction_signature_builder,
 )
 from llm_extract.modules import Extract
@@ -21,7 +22,8 @@ runner = CliRunner()
 @pytest.fixture(scope="module")
 def extractor():
     configure_dspy()
-    attrs = load_attributes_csv(FIXTURES / "attributes.csv")
+    csv_data = load_csv(FIXTURES / "attributes.csv")
+    attrs = build_attributes_from_csv(csv_data)
     signature = extraction_signature_builder(attrs)
     return Extract(signature)
 
@@ -34,7 +36,8 @@ def source_text():
 
 def test_can_extract_attributes_correctly(extractor, source_text):
     results = extractor(source_text)
-    attrs = load_attributes_csv(FIXTURES / "attributes.csv")
+    csv_data = load_csv(FIXTURES / "attributes.csv")
+    attrs = build_attributes_from_csv(csv_data)
 
     assert isinstance(results, dspy.Prediction)
     for attr in attrs:
@@ -58,8 +61,8 @@ def test_can_extract_attributes_correctly(extractor, source_text):
 
 @pytest.fixture(scope="module")
 def template_attrs():
-    sheets = load_workbook_sheets(FIXTURES / "RevMan Extraction Template.xlsx")
-    return build_attributes_from_sheets(sheets, "Study")
+    workbook_data = load_workbook(FIXTURES / "RevMan Extraction Template.xlsx")
+    return build_attributes_from_workbook(workbook_data, "Study")
 
 
 @pytest.fixture(scope="module")

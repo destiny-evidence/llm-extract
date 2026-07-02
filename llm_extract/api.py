@@ -4,7 +4,7 @@ from typing import Union
 import dspy
 
 from llm_extract.models import Attribute
-from llm_extract.factory import extraction_signature_builder
+from llm_extract.factory import build_extraction_signature
 from llm_extract.export import ExtractionResult
 from llm_extract.modules import Extract
 from llm_extract.document_processor import pdf_to_mixed_document
@@ -41,7 +41,7 @@ def extract(
     is_multimodal = source.suffix.lower().lstrip(".") in MULTIMODAL_FILETYPES
 
     content = _load_source(source)
-    signature = extraction_signature_builder(attributes, multimodal=is_multimodal)
+    signature = build_extraction_signature(attributes, multimodal=is_multimodal)
     extractor = Extract(signature)
     return ExtractionResult(
         prediction=extractor(content, with_reasoning=with_reasoning),
@@ -77,7 +77,7 @@ def extract_folder(
     folder_path = Path(folder_path)
     has_multimodal = any(ft in MULTIMODAL_FILETYPES for ft in filetypes)
 
-    signature = extraction_signature_builder(attributes, multimodal=has_multimodal)
+    signature = build_extraction_signature(attributes, multimodal=has_multimodal)
     extractor = Extract(signature)
 
     all_results = []

@@ -10,8 +10,11 @@ from llm_extract.api import (
 )
 from llm_extract.config import configure_dspy
 from llm_extract.export import write_extraction_results_to_folder
-from llm_extract.factory import build_attributes_from_sheets
-from llm_extract.loader import load_attributes_csv, load_workbook_sheets
+from llm_extract.factory import (
+    build_attributes_from_workbook,
+)
+from llm_extract.factory.csv import build_attributes_from_csv
+from llm_extract.loader import load_csv, load_workbook
 
 app = typer.Typer()
 
@@ -26,10 +29,11 @@ def _load_attributes(attrs: Path, root_type: Optional[str]) -> list:
                 "--type is required when --attrs is an Excel workbook.",
                 param_hint="--type",
             )
-        sheets = load_workbook_sheets(attrs)
-        return build_attributes_from_sheets(sheets, root_type)
+        workbook_data = load_workbook(attrs)
+        return build_attributes_from_workbook(workbook_data, root_type)
     else:
-        return load_attributes_csv(attrs)
+        csv_data = load_csv(attrs)
+        return build_attributes_from_csv(csv_data)
 
 
 def _validate_filetypes(filetypes: list[str]) -> list[str]:
