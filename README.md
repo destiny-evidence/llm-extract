@@ -255,7 +255,9 @@ Use `Literal` when a field should only ever be one of a fixed set of options (e.
 
 | Type | What it stores | Example value |
 |---|---|---|
-| `Literal["small", "medium", "large"]` | One of a fixed set of text options | `medium` |
+| `Literal[small, medium, large]` | One of a fixed set of text options | `medium` |
+
+**Important:** Literal values must NOT be quoted. Write `Literal[small, medium, large]`, not `Literal["small", "medium", "large"]`. This prevents issues with Excel/LibreOffice converting quotes to smart quotes.
 
 This constrains the LLM to pick one of the listed values instead of generating arbitrary text.
 

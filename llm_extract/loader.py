@@ -3,46 +3,37 @@ from pathlib import Path
 
 import openpyxl
 
-from llm_extract.models import Attribute
-from llm_extract.exceptions import (
-    AttributeTypeConversionError,
-    CannotCreateAttributeWithDisallowedNameError,
-    LoadingAttributeFromCSVError,
-)
+from llm_extract.models import CSVData, WorkbookData
+from llm_extract.exceptions import LoadingAttributeFromCSVError
 
 EXPECTED_COLUMNS = {"name", "type", "description"}
-DISALLOWED_NAMES = {"source"}
 
 
-def load_attributes_csv(path: Path | str) -> list[Attribute]:
+def load_csv(path: Path | str) -> CSVData:
     """
-    Load and parse attributes from a CSV file.
+    Load attribute data from a CSV file.
 
     :param path: path to the CSV file with columns: name, type, description
-    :return: list of parsed Attribute objects
+    :return: CSVData containing the loaded rows
+    :raises ValueError: if required columns are missing
+    :raises LoadingAttributeFromCSVError: if the file cannot be read
     """
     path = Path(path)
-    with path.open() as f:
-        reader = csv.DictReader(f)
-        missing = EXPECTED_COLUMNS - set(reader.fieldnames)
-        if missing:
-            raise ValueError(f"CSV missing columns: {missing}")
-        try:
-            attributes = [
-                Attribute.from_csv_row(row, disallowed_names=DISALLOWED_NAMES)
-                for row in reader
-            ]
-        except (
-            AttributeTypeConversionError,
-            CannotCreateAttributeWithDisallowedNameError,
-        ) as exc:
-            raise LoadingAttributeFromCSVError(
-                f"Failed to load attributes from csv: {exc}"
-            )
-        return attributes
+    try:
+        with path.open() as f:
+            reader = csv.DictReader(f)
+            missing = EXPECTED_COLUMNS - set(reader.fieldnames or [])
+            if missing:
+                raise ValueError(f"CSV missing columns: {missing}")
+            rows = list(reader)
+        return CSVData(rows=rows)
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise LoadingAttributeFromCSVError(f"Failed to load CSV: {exc}")
 
 
-def load_workbook_sheets(path: Path | str) -> dict[str, list[dict]]:
+def load_workbook(path: Path | str) -> WorkbookData:
     """
     Load all sheets from an Excel workbook as raw attribute rows.
 
@@ -51,7 +42,8 @@ def load_workbook_sheets(path: Path | str) -> dict[str, list[dict]]:
     that type.
 
     :param path: path to the Excel workbook
-    :return: dict mapping sheet name to a list of row dicts
+    :return: WorkbookData containing all sheets
+    :raises ValueError: if any sheet is missing required columns
     """
     workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
     sheets = {}
@@ -69,4 +61,4 @@ def load_workbook_sheets(path: Path | str) -> dict[str, list[dict]]:
             for row in rows
             if any(cell is not None for cell in row)
         ]
-    return sheets
+    return WorkbookData(sheets=sheets)

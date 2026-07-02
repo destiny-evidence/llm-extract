@@ -62,7 +62,7 @@ def test_extract_builds_signature_from_attributes(
     sample_attrs, sample_text_file
 ) -> None:
     with (
-        patch("llm_extract.api.extraction_signature_builder") as mock_builder,
+        patch("llm_extract.api.build_extraction_signature") as mock_builder,
         patch("llm_extract.api.Extract"),
     ):
         extract(sample_text_file, sample_attrs)

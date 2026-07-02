@@ -60,16 +60,23 @@ def mock_pipeline():
         ["product_name", "Widget"],
     ]
 
+    mock_attrs = MagicMock()
+
     with (
         patch("llm_extract.cli.configure_dspy") as mock_configure,
-        patch("llm_extract.cli.load_attributes_csv") as mock_load,
+        patch("llm_extract.cli.load_csv") as mock_load,
+        patch(
+            "llm_extract.cli.build_attributes_from_csv", return_value=mock_attrs
+        ) as mock_build_csv,
         patch("llm_extract.cli.extract", return_value=mock_result) as mock_extract,
     ):
         yield {
             "configure": mock_configure,
             "load": mock_load,
+            "build_csv": mock_build_csv,
             "extract": mock_extract,
             "result": mock_result,
+            "attrs": mock_attrs,
         }
 
 
@@ -84,8 +91,8 @@ def mock_excel_pipeline():
 
     with (
         patch("llm_extract.cli.configure_dspy") as mock_configure,
-        patch("llm_extract.cli.load_workbook_sheets") as mock_load_sheets,
-        patch("llm_extract.cli.build_attributes_from_sheets") as mock_build,
+        patch("llm_extract.cli.load_workbook") as mock_load_sheets,
+        patch("llm_extract.cli.build_attributes_from_workbook") as mock_build,
         patch("llm_extract.cli.extract", return_value=mock_result) as mock_extract,
     ):
         yield {
@@ -105,7 +112,7 @@ def mock_folder_pipeline():
 
     with (
         patch("llm_extract.cli.configure_dspy") as mock_configure,
-        patch("llm_extract.cli.load_attributes_csv") as mock_load,
+        patch("llm_extract.cli.load_csv") as mock_load,
         patch(
             "llm_extract.cli.extract_folder",
             return_value=[("file1", mock_result), ("file2", mock_result)],
@@ -136,7 +143,7 @@ def test_file_happy_path(source_file, attrs_file, mock_pipeline) -> None:
     mock_pipeline["load"].assert_called_once_with(attrs_file)
     mock_pipeline["extract"].assert_called_once_with(
         source_file,
-        mock_pipeline["load"].return_value,
+        mock_pipeline["attrs"],
         with_reasoning=False,
     )
 
@@ -157,7 +164,7 @@ def test_file_with_reasoning(source_file, attrs_file, mock_pipeline) -> None:
     assert result.exit_code == 0
     mock_pipeline["extract"].assert_called_once_with(
         source_file,
-        mock_pipeline["load"].return_value,
+        mock_pipeline["attrs"],
         with_reasoning=True,
     )
 
@@ -644,7 +651,7 @@ def test_folder_file_path_as_output_errors(source_folder, attrs_file, tmp_path) 
     output_file = tmp_path / "results.csv"
     with (
         patch("llm_extract.cli.configure_dspy"),
-        patch("llm_extract.cli.load_attributes_csv") as mock_load,
+        patch("llm_extract.cli.load_csv") as mock_load,
     ):
         mock_load.return_value = []
         result = runner.invoke(

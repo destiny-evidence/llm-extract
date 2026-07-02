@@ -5,8 +5,8 @@ import pytest
 from llm_extract.factory import (
     build_attributes_from_sheets,
     extraction_signature_builder,
-    fields_builder,
 )
+from llm_extract.factory.signature import _build_signature_fields
 from llm_extract.models import Attribute
 from llm_extract.exceptions import (
     CircularTypeReferenceError,
@@ -30,7 +30,7 @@ def sample_attrs() -> list[Attribute]:
 
 
 def test_fields_builder_always_includes_source(sample_attrs: list[Attribute]) -> None:
-    fields, annotations = fields_builder(sample_attrs)
+    fields, annotations = _build_signature_fields(sample_attrs)
     assert "source" in fields
     assert annotations["source"] is str
 
@@ -38,7 +38,7 @@ def test_fields_builder_always_includes_source(sample_attrs: list[Attribute]) ->
 def test_fields_builder_output_fields_match_attrs(
     sample_attrs: list[Attribute],
 ) -> None:
-    fields, annotations = fields_builder(sample_attrs)
+    fields, annotations = _build_signature_fields(sample_attrs)
     assert "product_name" in fields
     assert "price" in fields
     assert annotations["product_name"] == typing.Optional[str]
@@ -46,13 +46,13 @@ def test_fields_builder_output_fields_match_attrs(
 
 
 def test_fields_builder_empty_attrs_yields_only_source() -> None:
-    fields, annotations = fields_builder([])
+    fields, annotations = _build_signature_fields([])
     assert list(fields.keys()) == ["source"]
     assert list(annotations.keys()) == ["source"]
 
 
 def test_fields_builder_field_count(sample_attrs: list[Attribute]) -> None:
-    fields, _ = fields_builder(sample_attrs)
+    fields, _ = _build_signature_fields(sample_attrs)
     assert len(fields) == 1 + len(sample_attrs)
 
 
@@ -94,9 +94,9 @@ def test_build_attributes_from_sheets_simple_types() -> None:
 
 
 def test_build_attributes_from_sheets_literal_type() -> None:
-    # Literal["small", "large"] should not be mistaken for a custom-type
+    # Literal[small, large] should not be mistaken for a custom-type
     # sheet reference to a sheet named "small" or "large"
-    sheets = {"Study": [_row("size", 'Literal["small", "large"]')]}
+    sheets = {"Study": [_row("size", "Literal[small, large]")]}
     attrs = build_attributes_from_sheets(sheets, "Study")
     assert attrs[0].attr_type == typing.Optional[typing.Literal["small", "large"]]
 
@@ -179,3 +179,51 @@ def test_build_attributes_from_sheets_allows_disallowed_name_in_nested_type() ->
     attrs = build_attributes_from_sheets(sheets, "Study")
     author_type = typing.get_args(attrs[0].attr_type)[0]
     assert [f.name for f in dataclasses.fields(author_type)] == ["source"]
+
+
+# --- build_attribute_from_row ---
+
+
+def _csv_row(
+    name: str = "price", type_: str = "float", desc: str = "The price"
+) -> dict:
+    return {"name": name, "type": type_, "description": desc}
+
+
+def testbuild_attribute_from_row_valid() -> None:
+    from llm_extract.factory import build_attribute_from_row
+
+    attr = build_attribute_from_row(_csv_row())
+    assert attr.name == "price"
+    assert attr.attr_type == typing.Optional[float]
+    assert attr.description == "The price"
+
+
+def testbuild_attribute_from_row_complex_type() -> None:
+    from llm_extract.factory import build_attribute_from_row
+
+    attr = build_attribute_from_row(_csv_row(type_="list[str]"))
+    assert attr.attr_type == typing.Optional[list[str]]
+
+
+def testbuild_attribute_from_row_disallowed_name_raises() -> None:
+    from llm_extract.factory import build_attribute_from_row
+    from llm_extract.exceptions import CannotCreateAttributeWithDisallowedNameError
+
+    with pytest.raises(CannotCreateAttributeWithDisallowedNameError):
+        build_attribute_from_row(_csv_row(name="source"), disallowed_names={"source"})
+
+
+def testbuild_attribute_from_row_allowed_when_not_in_disallowed_set() -> None:
+    from llm_extract.factory import build_attribute_from_row
+
+    attr = build_attribute_from_row(_csv_row(name="source"), disallowed_names=set())
+    assert attr.name == "source"
+
+
+def testbuild_attribute_from_row_invalid_type_raises() -> None:
+    from llm_extract.factory import build_attribute_from_row
+    from llm_extract.exceptions import AttributeTypeConversionError
+
+    with pytest.raises(AttributeTypeConversionError):
+        build_attribute_from_row(_csv_row(type_="pathlib.Path"))
