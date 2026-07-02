@@ -141,11 +141,10 @@ def test_file_happy_path(source_file, attrs_file, mock_pipeline) -> None:
     assert result.exit_code == 0
     mock_pipeline["configure"].assert_called_once_with(env_file=None, multimodal=False)
     mock_pipeline["load"].assert_called_once_with(attrs_file)
-    mock_pipeline["extract"].assert_called_once_with(
-        source_file,
-        mock_pipeline["attrs"],
-        with_reasoning=False,
-    )
+    mock_extract_call = mock_pipeline["extract"].call_args
+    assert mock_extract_call[0] == (source_file, mock_pipeline["attrs"])
+    assert mock_extract_call[1]["with_reasoning"] is False
+    assert "on_progress" in mock_extract_call[1]
 
 
 def test_file_with_reasoning(source_file, attrs_file, mock_pipeline) -> None:
@@ -162,11 +161,10 @@ def test_file_with_reasoning(source_file, attrs_file, mock_pipeline) -> None:
     )
 
     assert result.exit_code == 0
-    mock_pipeline["extract"].assert_called_once_with(
-        source_file,
-        mock_pipeline["attrs"],
-        with_reasoning=True,
-    )
+    mock_extract_call = mock_pipeline["extract"].call_args
+    assert mock_extract_call[0] == (source_file, mock_pipeline["attrs"])
+    assert mock_extract_call[1]["with_reasoning"] is True
+    assert "on_progress" in mock_extract_call[1]
 
 
 def test_file_calls_display_when_no_output(
@@ -348,11 +346,13 @@ def test_file_with_excel_attrs_and_type(
     mock_excel_pipeline["build"].assert_called_once_with(
         mock_excel_pipeline["load_sheets"].return_value, "Study"
     )
-    mock_excel_pipeline["extract"].assert_called_once_with(
+    mock_extract_call = mock_excel_pipeline["extract"].call_args
+    assert mock_extract_call[0] == (
         source_file,
         mock_excel_pipeline["build"].return_value,
-        with_reasoning=False,
     )
+    assert mock_extract_call[1]["with_reasoning"] is False
+    assert "on_progress" in mock_extract_call[1]
 
 
 def test_file_with_excel_attrs_missing_type_errors(

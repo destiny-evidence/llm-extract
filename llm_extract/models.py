@@ -1,7 +1,19 @@
 import typing
 from dataclasses import dataclass
+from enum import StrEnum
 
 from pydantic.dataclasses import dataclass as pydantic_dataclass
+
+
+class ExtractionStage(StrEnum):
+    """Stages in the extraction pipeline."""
+
+    LOADING_SOURCE = "loading_source"
+    SOURCE_LOADED = "source_loaded"
+    TRANSFORMING_PDF = "transforming_pdf"
+    EXTRACTING = "extracting"
+    COMPLETED = "completed"
+
 
 # TODO could add Optional + Union for more sophisticated types
 ALLOWED_TYPES = {

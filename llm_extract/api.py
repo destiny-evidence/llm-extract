@@ -1,9 +1,10 @@
 from pathlib import Path
+from typing import Callable
 
 import dspy
 
 from llm_extract.loader import load_source
-from llm_extract.models import Attribute
+from llm_extract.models import Attribute, ExtractionStage
 from llm_extract.factory import build_extraction_signature
 from llm_extract.export import ExtractionResult
 from llm_extract.modules import Extract
@@ -14,7 +15,13 @@ SUPPORTED_FILETYPES = TEXT_FILETYPES | MULTIMODAL_FILETYPES
 
 
 def extract(
-    source: Path, attributes: list[Attribute], with_reasoning: bool = False
+    source: Path,
+    attributes: list[Attribute],
+    with_reasoning: bool = False,
+    on_progress: Callable[
+        [ExtractionStage, Path, ExtractionResult | None, Exception | None], None
+    ]
+    | None = None,
 ) -> ExtractionResult:
     """
     Extract structured attributes from a source file (text or PDF).
@@ -26,18 +33,43 @@ def extract(
     :param source: path to the source file to extract attributes from
     :param attributes: list of attributes defining what to extract
     :param with_reasoning: whether to use chain-of-thought reasoning
+    :param on_progress: optional callback for progress updates. Called with:
+                       (stage, source, result=None, error=None) where stage is an ExtractionStage
     :return: an ExtractionResult wrapping the DSPy Prediction
     """
     source = Path(source)
     is_multimodal = source.suffix.lower().lstrip(".") in MULTIMODAL_FILETYPES
 
-    content = load_source(source)
-    signature = build_extraction_signature(attributes, multimodal=is_multimodal)
-    extractor = Extract(signature)
-    return ExtractionResult(
-        prediction=extractor(content, with_reasoning=with_reasoning),
-        attributes=attributes,
-    )
+    try:
+        if on_progress:
+            on_progress(ExtractionStage.LOADING_SOURCE, source)
+
+        content = load_source(source)
+
+        if on_progress:
+            if is_multimodal:
+                on_progress(ExtractionStage.TRANSFORMING_PDF, source)
+            else:
+                on_progress(ExtractionStage.SOURCE_LOADED, source)
+
+        if on_progress:
+            on_progress(ExtractionStage.EXTRACTING, source)
+
+        signature = build_extraction_signature(attributes, multimodal=is_multimodal)
+        extractor = Extract(signature)
+        result = ExtractionResult(
+            prediction=extractor(content, with_reasoning=with_reasoning),
+            attributes=attributes,
+        )
+
+        if on_progress:
+            on_progress(ExtractionStage.COMPLETED, source, result=result)
+
+        return result
+    except Exception as exc:
+        if on_progress:
+            on_progress(ExtractionStage.COMPLETED, source, error=exc)
+        raise
 
 
 def extract_folder(

@@ -9,16 +9,40 @@ from llm_extract.api import (
     SUPPORTED_FILETYPES,
 )
 from llm_extract.config import configure_dspy
-from llm_extract.export import write_extraction_results_to_folder
+from llm_extract.export import write_extraction_results_to_folder, ExtractionResult
 from llm_extract.factory import (
     build_attributes_from_workbook,
 )
 from llm_extract.factory.csv import build_attributes_from_csv
 from llm_extract.loader import load_csv, load_workbook
+from llm_extract.models import ExtractionStage
 
 app = typer.Typer()
 
 EXCEL_SUFFIXES = {".xlsx", ".xlsm"}
+
+
+def _progress_callback(
+    stage: ExtractionStage,
+    source: Path,
+    result: ExtractionResult | None = None,
+    error: Exception | None = None,
+):
+    """Display extraction progress to the user."""
+    match stage:
+        case ExtractionStage.LOADING_SOURCE:
+            typer.echo(f"Loading {source.name}...")
+        case ExtractionStage.SOURCE_LOADED:
+            typer.echo(f"✓ Loaded {source.name}")
+        case ExtractionStage.TRANSFORMING_PDF:
+            typer.echo(f"Processing PDF pages...")
+        case ExtractionStage.EXTRACTING:
+            typer.echo(f"Extracting with LLM...")
+        case ExtractionStage.COMPLETED:
+            if error:
+                typer.echo(f"❌ Failed: {error}")
+            else:
+                typer.echo(f"✓ Extracted {len(result.attributes)} attributes")
 
 
 def _load_attributes(attrs: Path, root_type: Optional[str]) -> list:
@@ -126,7 +150,12 @@ def file(
     configure_dspy(env_file=env_file, multimodal=is_pdf)
     attributes = _load_attributes(attrs, root_type)
 
-    result = extract(source, attributes, with_reasoning=with_reasoning)
+    result = extract(
+        source,
+        attributes,
+        with_reasoning=with_reasoning,
+        on_progress=_progress_callback,
+    )
     if output is None:
         result.display()
     else:
