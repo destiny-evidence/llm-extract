@@ -1,8 +1,10 @@
 import csv
 from pathlib import Path
+from typing import Union
 
 import openpyxl
 
+from llm_extract.document_processor import pdf_to_mixed_document
 from llm_extract.models import CSVData, WorkbookData
 from llm_extract.exceptions import LoadingAttributeFromCSVError
 
@@ -62,3 +64,11 @@ def load_workbook(path: Path | str) -> WorkbookData:
             if any(cell is not None for cell in row)
         ]
     return WorkbookData(sheets=sheets)
+
+
+def load_source(path: Path) -> Union[str, list]:
+    """Load source content from file, handling PDFs and text files."""
+    if path.suffix.lower() == ".pdf":
+        return pdf_to_mixed_document(path).pages
+    else:
+        return path.read_text()

@@ -1,25 +1,16 @@
 from pathlib import Path
-from typing import Union
 
 import dspy
 
+from llm_extract.loader import load_source
 from llm_extract.models import Attribute
 from llm_extract.factory import build_extraction_signature
 from llm_extract.export import ExtractionResult
 from llm_extract.modules import Extract
-from llm_extract.document_processor import pdf_to_mixed_document
 
 TEXT_FILETYPES = {"txt", "md", "html"}
 MULTIMODAL_FILETYPES = {"pdf"}
 SUPPORTED_FILETYPES = TEXT_FILETYPES | MULTIMODAL_FILETYPES
-
-
-def _load_source(path: Path) -> Union[str, list]:
-    """Load source content from file, handling PDFs and text files."""
-    if path.suffix.lower() == ".pdf":
-        return pdf_to_mixed_document(path).pages
-    else:
-        return path.read_text()
 
 
 def extract(
@@ -40,7 +31,7 @@ def extract(
     source = Path(source)
     is_multimodal = source.suffix.lower().lstrip(".") in MULTIMODAL_FILETYPES
 
-    content = _load_source(source)
+    content = load_source(source)
     signature = build_extraction_signature(attributes, multimodal=is_multimodal)
     extractor = Extract(signature)
     return ExtractionResult(
@@ -90,7 +81,7 @@ def extract_folder(
 
         examples = [
             dspy.Example(
-                source=_load_source(f), with_reasoning=with_reasoning
+                source=load_source(f), with_reasoning=with_reasoning
             ).with_inputs("source", "with_reasoning")
             for f in files
         ]
