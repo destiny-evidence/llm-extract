@@ -2,21 +2,13 @@ import base64
 import re
 import string
 import tempfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Union
 
 import dspy
 import pdfplumber
 
-
-@dataclass
-class MixedDocument:
-    """Represents a document as a sequence of pages containing text and/or images."""
-
-    pages: list[Union[str, dspy.Image]]
-    text_page_count: int = 0
-    image_page_count: int = 0
+from llm_extract.models import MixedDocument
 
 
 def is_high_quality_text(

@@ -3,15 +3,11 @@ from typing import Callable
 
 import dspy
 
-from llm_extract.loader import load_source
-from llm_extract.models import Attribute, ExtractionStage
+from llm_extract.loader import load_source, MULTIMODAL_FILETYPES
+from llm_extract.models import Attribute, ExtractionStage, MixedDocument
 from llm_extract.factory import build_extraction_signature
 from llm_extract.export import ExtractionResult
 from llm_extract.modules import Extract
-
-TEXT_FILETYPES = {"txt", "md", "html"}
-MULTIMODAL_FILETYPES = {"pdf"}
-SUPPORTED_FILETYPES = TEXT_FILETYPES | MULTIMODAL_FILETYPES
 
 
 def extract(
@@ -44,11 +40,17 @@ def extract(
         if on_progress:
             on_progress(ExtractionStage.LOADING_SOURCE, source)
 
-        content = load_source(source)
+        content_or_doc = load_source(source)
+        if isinstance(content_or_doc, MixedDocument):
+            content = content_or_doc.pages
+        else:
+            content = content_or_doc
 
         if on_progress:
             if is_multimodal:
-                on_progress(ExtractionStage.TRANSFORMING_PDF, source)
+                on_progress(
+                    ExtractionStage.TRANSFORMING_PDF, source, doc=content_or_doc
+                )
             else:
                 on_progress(ExtractionStage.SOURCE_LOADED, source)
 
@@ -111,12 +113,16 @@ def extract_folder(
         if not files:
             continue
 
-        examples = [
-            dspy.Example(
-                source=load_source(f), with_reasoning=with_reasoning
-            ).with_inputs("source", "with_reasoning")
-            for f in files
-        ]
+        examples = []
+        for f in files:
+            source = load_source(f)
+            if isinstance(source, MixedDocument):
+                source = source.pages
+            examples.append(
+                dspy.Example(source=source, with_reasoning=with_reasoning).with_inputs(
+                    "source", "with_reasoning"
+                )
+            )
 
         predictions = extractor.batch(examples, num_threads=max_concurrent)
 

@@ -5,8 +5,13 @@ from typing import Union
 import openpyxl
 
 from llm_extract.document_processor import pdf_to_mixed_document
-from llm_extract.models import CSVData, WorkbookData
+from llm_extract.models import CSVData, WorkbookData, MixedDocument
 from llm_extract.exceptions import LoadingAttributeFromCSVError
+
+
+TEXT_FILETYPES = {"txt", "md", "html"}
+MULTIMODAL_FILETYPES = {"pdf"}
+SUPPORTED_FILETYPES = TEXT_FILETYPES | MULTIMODAL_FILETYPES
 
 EXPECTED_COLUMNS = {"name", "type", "description"}
 
@@ -66,9 +71,9 @@ def load_workbook(path: Path | str) -> WorkbookData:
     return WorkbookData(sheets=sheets)
 
 
-def load_source(path: Path) -> Union[str, list]:
+def load_source(path: Path) -> Union[str, MixedDocument]:
     """Load source content from file, handling PDFs and text files."""
     if path.suffix.lower() == ".pdf":
-        return pdf_to_mixed_document(path).pages
+        return pdf_to_mixed_document(path)
     else:
         return path.read_text()

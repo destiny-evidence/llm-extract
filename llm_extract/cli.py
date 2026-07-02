@@ -6,7 +6,6 @@ import typer
 from llm_extract.api import (
     extract,
     extract_folder,
-    SUPPORTED_FILETYPES,
 )
 from llm_extract.config import configure_dspy
 from llm_extract.export import write_extraction_results_to_folder, ExtractionResult
@@ -14,8 +13,8 @@ from llm_extract.factory import (
     build_attributes_from_workbook,
 )
 from llm_extract.factory.csv import build_attributes_from_csv
-from llm_extract.loader import load_csv, load_workbook
-from llm_extract.models import ExtractionStage
+from llm_extract.loader import load_csv, load_workbook, SUPPORTED_FILETYPES
+from llm_extract.models import ExtractionStage, MixedDocument
 
 app = typer.Typer()
 
@@ -27,15 +26,28 @@ def _progress_callback(
     source: Path,
     result: ExtractionResult | None = None,
     error: Exception | None = None,
+    doc: MixedDocument | None = None,
 ):
-    """Display extraction progress to the user."""
+    """
+    Display extraction progress to the user at each stage.
+
+    :param stage: the current extraction stage
+    :param source: path to the source file being processed
+    :param result: the extraction result (populated on COMPLETED stage)
+    :param error: any error that occurred (populated on COMPLETED stage)
+    :param doc: the MixedDocument object for PDFs (populated on TRANSFORMING_PDF stage)
+    """
     match stage:
         case ExtractionStage.LOADING_SOURCE:
             typer.echo(f"Loading {source.name}...")
         case ExtractionStage.SOURCE_LOADED:
             typer.echo(f"✓ Loaded {source.name}")
         case ExtractionStage.TRANSFORMING_PDF:
-            typer.echo(f"Processing PDF pages...")
+            if doc:
+                ratio = f"({doc.text_page_count} text, {doc.image_page_count} images)"
+                typer.echo(f"Processing PDF pages... {ratio}")
+            else:
+                typer.echo(f"Processing PDF pages...")
         case ExtractionStage.EXTRACTING:
             typer.echo(f"Extracting with LLM...")
         case ExtractionStage.COMPLETED:
@@ -46,7 +58,14 @@ def _progress_callback(
 
 
 def _load_attributes(attrs: Path, root_type: Optional[str]) -> list:
-    """Load attributes from CSV or Excel file."""
+    """
+    Load attributes from CSV or Excel workbook.
+
+    :param attrs: path to the attributes file (CSV or Excel workbook)
+    :param root_type: name of the top-level sheet (required for Excel workbooks)
+    :return: list of Attribute objects
+    :raises typer.BadParameter: if Excel workbook is provided without --type
+    """
     if attrs.suffix.lower() in EXCEL_SUFFIXES:
         if root_type is None:
             raise typer.BadParameter(

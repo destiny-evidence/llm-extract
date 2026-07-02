@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 
 from llm_extract.document_processor import (
-    MixedDocument,
     is_high_quality_text,
 )
+from llm_extract.models import MixedDocument
 
 
 class TestQualityHeuristics:
