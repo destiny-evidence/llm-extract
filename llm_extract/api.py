@@ -125,6 +125,8 @@ def extract_folder(
     extractor = Extract(signature)
 
     all_results = []
+    all_failures = []
+
     for filetype in filetypes:
         pattern = f"**/*.{filetype}" if recursive else f"*.{filetype}"
         files = sorted(folder_path.glob(pattern))
@@ -133,6 +135,7 @@ def extract_folder(
             continue
 
         # Load sources with progress
+        # Create examples in order (DSPy batch preserves order, so index[i] corresponds to files[i])
         examples = []
         for i, f in enumerate(files):
             if on_progress:
@@ -147,20 +150,45 @@ def extract_folder(
             )
 
         # Batch processing (show progress bar only if on_progress callback is provided)
-        predictions = extractor.batch(
+        predictions, failed_examples, exceptions = extractor.batch(
             examples,
             num_threads=max_concurrent,
             disable_progress_bar=(on_progress is None),
+            return_failed_examples=True,
         )
 
-        all_results.extend(
-            [
-                (
-                    str(f.relative_to(folder_path).with_suffix("")),
-                    ExtractionResult(pred, attributes),
+        # Map results back using natural index correspondence
+        failed_indices = {examples.index(ex) for ex in failed_examples}
+        successful_count = 0
+
+        for i, example in enumerate(examples):
+            if i not in failed_indices:
+                f = files[i]
+                all_results.append(
+                    (
+                        str(f.relative_to(folder_path).with_suffix("")),
+                        ExtractionResult(predictions[successful_count], attributes),
+                    )
                 )
-                for f, pred in zip(files, predictions)
-            ]
-        )
+                successful_count += 1
+            else:
+                # Track this failure
+                f = files[i]
+                exc_idx = failed_examples.index(example)
+                all_failures.append(
+                    (
+                        str(f.relative_to(folder_path)),
+                        exceptions[exc_idx],
+                    )
+                )
+
+    # If there were failures, raise an exception with details
+    if all_failures:
+        failure_msg = "Extraction failed for the following files:\n"
+        for filepath, exc in all_failures:
+            error_type = type(exc).__name__
+            error_msg = str(exc)
+            failure_msg += f"  • {filepath}: {error_type}: {error_msg}\n"
+        raise RuntimeError(failure_msg.rstrip())
 
     return all_results
