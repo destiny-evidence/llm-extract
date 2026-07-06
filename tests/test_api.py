@@ -72,7 +72,7 @@ def test_extract_builds_signature_from_attributes(
 
 def test_extract_multimodal_pdf(sample_attrs) -> None:
     """Test that extract() handles PDFs (multimodal) correctly."""
-    pdf_path = Path("tests/fixtures/documents/aiayn.pdf")
+    pdf_path = Path(__file__).parent / "fixtures" / "documents" / "aiayn.pdf"
     if not pdf_path.exists():
         pytest.skip("PDF fixture not found")
 
@@ -171,7 +171,7 @@ def test_extract_folder_multimodal(sample_attrs) -> None:
     """Test that extract_folder() handles multimodal (PDFs) correctly."""
     from llm_extract.api import extract_folder
 
-    pdf_dir = Path("tests/fixtures/documents")
+    pdf_dir = Path(__file__).parent / "fixtures" / "documents"
     if not pdf_dir.exists() or not list(pdf_dir.glob("*.pdf")):
         pytest.skip("PDF fixtures not found")
 
