@@ -75,6 +75,7 @@ This installs `llm-extract` as a command available anywhere on your machine.
 | `LLM_EXTRACT_API_BASE` | The URL of your LLM provider (e.g. `https://api.openai.com/v1`) |
 | `LLM_EXTRACT_API_KEY` | Your API key |
 | `LLM_EXTRACT_MODEL` | The model to use (e.g. `openai/gpt-4o`) |
+| `LLM_EXTRACT_TIMEOUT` | *(Optional)* Request timeout in seconds. Default: 300 (5 minutes). Increase for large documents or slower API responses. |
 
 **For PDF extraction:** use a vision-capable model like `gpt-4o`, `claude-3-5-sonnet-20241022`, or `gemini-2.0-flash`. Regular models (e.g., `gpt-3.5-turbo`) only work with plain text files.
 
@@ -152,6 +153,19 @@ This traverses all subdirectories and recreates the folder structure in the outp
 | `--max-concurrent` | `8` | Maximum number of concurrent extractions. Use this to control resource usage or respect API rate limits. |
 | `--recursive` | `false` | Recursively traverse subdirectories and preserve directory structure in output. Useful for processing entire projects. |
 
+### Progress and performance
+
+**Progress visibility:**
+- **Single file extraction:** Shows stage-by-stage progress (loading, transforming PDFs, extracting, completed)
+- **Folder extraction:** Shows a progress bar while loading files, then displays batch extraction progress
+
+**Timeout handling:**
+- Extraction requests timeout after **5 minutes (300 seconds)** by default
+- If you encounter timeouts on large documents or slow API connections, increase the timeout in your `.env` file:
+  ```
+  LLM_EXTRACT_TIMEOUT=600
+  ```
+  
 ### Output format
 
 #### Console
