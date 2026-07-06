@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+from tqdm import tqdm
 
 from llm_extract.api import (
     extract,
@@ -21,15 +22,15 @@ app = typer.Typer()
 EXCEL_SUFFIXES = {".xlsx", ".xlsm"}
 
 
-def _progress_callback(
+def _file_progress_callback(
     stage: ExtractionStage,
     source: Path,
     result: ExtractionResult | None = None,
     error: Exception | None = None,
     doc: MixedDocument | None = None,
-):
+) -> None:
     """
-    Display extraction progress to the user at each stage.
+    Display extraction progress for single file extraction.
 
     :param stage: the current extraction stage
     :param source: path to the source file being processed
@@ -55,6 +56,30 @@ def _progress_callback(
                 typer.echo(f"❌ Failed: {error}")
             else:
                 typer.echo(f"✓ Extracted {len(result.attributes)} attributes")
+
+
+def _make_folder_progress_callback() -> callable:
+    """
+    Create a progress callback for folder extraction.
+
+    Returns a callback that displays a tqdm progress bar during the loading phase.
+    DSPy handles progress display during batch extraction.
+
+    :return: progress callback (stage, current, total) -> None
+    """
+    loading_bar = None
+
+    def callback(stage: str, current: int, total: int) -> None:
+        nonlocal loading_bar
+        if stage == "loading_source":
+            if loading_bar is None:
+                loading_bar = tqdm(total=total, desc="Loading sources", unit="file")
+            loading_bar.update(1)
+            if current == total - 1:
+                loading_bar.close()
+                loading_bar = None
+
+    return callback
 
 
 def _load_attributes(attrs: Path, root_type: Optional[str]) -> list:
@@ -173,7 +198,7 @@ def file(
         source,
         attributes,
         with_reasoning=with_reasoning,
-        on_progress=_progress_callback,
+        on_progress=_file_progress_callback,
     )
     if output is None:
         result.display()
@@ -270,6 +295,7 @@ def folder(
         with_reasoning=with_reasoning,
         max_concurrent=max_concurrent,
         recursive=recursive,
+        on_progress=_make_folder_progress_callback(),
     )
 
     if not results:

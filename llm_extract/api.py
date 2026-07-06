@@ -98,6 +98,7 @@ def extract_folder(
     with_reasoning: bool = False,
     max_concurrent: int = 8,
     recursive: bool = False,
+    on_progress: Callable[[str, int, int], None] | None = None,
 ) -> list[tuple[str, ExtractionResult]]:
     """
     Extract structured attributes from all files in a folder concurrently.
@@ -114,6 +115,7 @@ def extract_folder(
     :param with_reasoning: whether to use chain-of-thought reasoning
     :param max_concurrent: maximum number of concurrent extractions (default 8)
     :param recursive: whether to recursively traverse subdirectories (default False)
+    :param on_progress: optional callback (stage, current, total) for progress updates
     :return: list of (relative_path, ExtractionResult) tuples
     """
     folder_path = Path(folder_path)
@@ -130,8 +132,11 @@ def extract_folder(
         if not files:
             continue
 
+        # Load sources with progress
         examples = []
-        for f in files:
+        for i, f in enumerate(files):
+            if on_progress:
+                on_progress("loading_source", i, len(files))
             source = load_source(f)
             if isinstance(source, MixedDocument):
                 source = source.pages
@@ -141,7 +146,12 @@ def extract_folder(
                 )
             )
 
-        predictions = extractor.batch(examples, num_threads=max_concurrent)
+        # Batch processing (show progress bar only if on_progress callback is provided)
+        predictions = extractor.batch(
+            examples,
+            num_threads=max_concurrent,
+            disable_progress_bar=(on_progress is None),
+        )
 
         all_results.extend(
             [
