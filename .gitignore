@@ -15,4 +15,8 @@ wheels/
 # Misc Files
 *.json
 
+# Extraction output files accidentally created at project root
+/*.csv
+/*.xlsx
+
 /.env
