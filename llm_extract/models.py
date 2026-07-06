@@ -1,7 +1,21 @@
 import typing
 from dataclasses import dataclass
+from enum import StrEnum
+from typing import Union
 
+import dspy
 from pydantic.dataclasses import dataclass as pydantic_dataclass
+
+
+class ExtractionStage(StrEnum):
+    """Stages in the extraction pipeline."""
+
+    LOADING_SOURCE = "loading_source"
+    SOURCE_LOADED = "source_loaded"
+    TRANSFORMING_PDF = "transforming_pdf"
+    EXTRACTING = "extracting"
+    COMPLETED = "completed"
+
 
 # TODO could add Optional + Union for more sophisticated types
 ALLOWED_TYPES = {
@@ -41,3 +55,12 @@ class Attribute:
     name: str
     attr_type: TypeExpr
     description: str
+
+
+@dataclass
+class MixedDocument:
+    """Represents a document as a sequence of pages containing text and/or images."""
+
+    pages: list[Union[str, dspy.Image]]
+    text_page_count: int = 0
+    image_page_count: int = 0

@@ -1,4 +1,5 @@
 import dspy
+import litellm
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -37,6 +38,10 @@ def _load_env(env_file: Optional[Path] = None) -> None:
             "Set them in your shell, a .env file, or pass --env-file."
         )
 
+    # Configure LiteLLM timeout from LLM_EXTRACT_TIMEOUT environment variable
+    timeout_seconds = int(os.environ.get("LLM_EXTRACT_TIMEOUT", "300"))
+    litellm.request_timeout = timeout_seconds
+
 
 @cache
 def get_llm(
@@ -44,6 +49,9 @@ def get_llm(
 ) -> dspy.LM:
     """
     Create a DSPy Language model object from environment variables.
+
+    Timeout is configured via LLM_EXTRACT_TIMEOUT environment variable (default 300s).
+    LiteLLM reads this as LIT_LLM_REQUEST_TIMEOUT internally.
 
     :param model: model endpoint of the provider
     :param cache: whether the model responses should be cached

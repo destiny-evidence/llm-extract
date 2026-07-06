@@ -2,27 +2,95 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+from tqdm import tqdm
 
 from llm_extract.api import (
     extract,
     extract_folder,
-    SUPPORTED_FILETYPES,
 )
 from llm_extract.config import configure_dspy
-from llm_extract.export import write_extraction_results_to_folder
+from llm_extract.export import write_extraction_results_to_folder, ExtractionResult
 from llm_extract.factory import (
     build_attributes_from_workbook,
 )
 from llm_extract.factory.csv import build_attributes_from_csv
-from llm_extract.loader import load_csv, load_workbook
+from llm_extract.loader import load_csv, load_workbook, SUPPORTED_FILETYPES
+from llm_extract.models import ExtractionStage, MixedDocument
 
 app = typer.Typer()
 
 EXCEL_SUFFIXES = {".xlsx", ".xlsm"}
 
 
+def _file_progress_callback(
+    stage: ExtractionStage,
+    source: Path,
+    result: ExtractionResult | None = None,
+    error: Exception | None = None,
+    doc: MixedDocument | None = None,
+) -> None:
+    """
+    Display extraction progress for single file extraction.
+
+    :param stage: the current extraction stage
+    :param source: path to the source file being processed
+    :param result: the extraction result (populated on COMPLETED stage)
+    :param error: any error that occurred (populated on COMPLETED stage)
+    :param doc: the MixedDocument object for PDFs (populated on TRANSFORMING_PDF stage)
+    """
+    match stage:
+        case ExtractionStage.LOADING_SOURCE:
+            typer.echo(f"Loading {source.name}...")
+        case ExtractionStage.SOURCE_LOADED:
+            typer.echo(f"✓ Loaded {source.name}")
+        case ExtractionStage.TRANSFORMING_PDF:
+            if doc:
+                ratio = f"({doc.text_page_count} text, {doc.image_page_count} images)"
+                typer.echo(f"Processing PDF pages... {ratio}")
+            else:
+                typer.echo(f"Processing PDF pages...")
+        case ExtractionStage.EXTRACTING:
+            typer.echo(f"Extracting with LLM...")
+        case ExtractionStage.COMPLETED:
+            if error:
+                typer.echo(f"❌ Failed: {error}")
+            else:
+                typer.echo(f"✓ Extracted {len(result.attributes)} attributes")
+
+
+def _make_folder_progress_callback() -> callable:
+    """
+    Create a progress callback for folder extraction.
+
+    Returns a callback that displays a tqdm progress bar during the loading phase.
+    DSPy handles progress display during batch extraction.
+
+    :return: progress callback (stage, current, total) -> None
+    """
+    loading_bar = None
+
+    def callback(stage: str, current: int, total: int) -> None:
+        nonlocal loading_bar
+        if stage == "loading_source":
+            if loading_bar is None:
+                loading_bar = tqdm(total=total, desc="Loading sources", unit="file")
+            loading_bar.update(1)
+            if current == total - 1:
+                loading_bar.close()
+                loading_bar = None
+
+    return callback
+
+
 def _load_attributes(attrs: Path, root_type: Optional[str]) -> list:
-    """Load attributes from CSV or Excel file."""
+    """
+    Load attributes from CSV or Excel workbook.
+
+    :param attrs: path to the attributes file (CSV or Excel workbook)
+    :param root_type: name of the top-level sheet (required for Excel workbooks)
+    :return: list of Attribute objects
+    :raises typer.BadParameter: if Excel workbook is provided without --type
+    """
     if attrs.suffix.lower() in EXCEL_SUFFIXES:
         if root_type is None:
             raise typer.BadParameter(
@@ -126,7 +194,12 @@ def file(
     configure_dspy(env_file=env_file, multimodal=is_pdf)
     attributes = _load_attributes(attrs, root_type)
 
-    result = extract(source, attributes, with_reasoning=with_reasoning)
+    result = extract(
+        source,
+        attributes,
+        with_reasoning=with_reasoning,
+        on_progress=_file_progress_callback,
+    )
     if output is None:
         result.display()
     else:
@@ -222,6 +295,7 @@ def folder(
         with_reasoning=with_reasoning,
         max_concurrent=max_concurrent,
         recursive=recursive,
+        on_progress=_make_folder_progress_callback(),
     )
 
     if not results:
