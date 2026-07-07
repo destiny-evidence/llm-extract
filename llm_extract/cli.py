@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import typer
 from tqdm import tqdm
@@ -58,7 +58,7 @@ def _file_progress_callback(
                 typer.echo(f"✓ Extracted {len(result.attributes)} attributes")
 
 
-def _make_folder_progress_callback() -> callable:
+def _make_folder_progress_callback() -> Callable[[str, int, int], None]:
     """
     Create a progress callback for folder extraction.
 
@@ -78,6 +78,28 @@ def _make_folder_progress_callback() -> callable:
             if current == total - 1:
                 loading_bar.close()
                 loading_bar = None
+
+    return callback
+
+
+def _make_export_progress_callback() -> Callable[[int, int], None]:
+    """
+    Create a progress callback for writing extraction results to a folder.
+
+    Returns a callback that displays a tqdm progress bar while results are written to disk.
+
+    :return: progress callback (current, total) -> None
+    """
+    write_bar = None
+
+    def callback(current: int, total: int) -> None:
+        nonlocal write_bar
+        if write_bar is None:
+            write_bar = tqdm(total=total, desc="Writing results", unit="file")
+        write_bar.update(1)
+        if current == total:
+            write_bar.close()
+            write_bar = None
 
     return callback
 
@@ -306,5 +328,10 @@ def folder(
 
     output_dir = output or (source.parent / f"{source.name}-extracted")
     use_excel = attrs.suffix.lower() in EXCEL_SUFFIXES
-    write_extraction_results_to_folder(output_dir, results, use_excel=use_excel)
+    write_extraction_results_to_folder(
+        output_dir,
+        results,
+        use_excel=use_excel,
+        on_progress=_make_export_progress_callback(),
+    )
     typer.echo(f"Extracted {len(results)} files to {output_dir}")

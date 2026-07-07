@@ -5,6 +5,7 @@ import re
 import shutil
 import typing
 from pathlib import Path
+from typing import Callable
 
 import dspy
 import openpyxl
@@ -357,6 +358,7 @@ def write_extraction_results_to_folder(
     output_dir: Path,
     results: list[tuple[str, ExtractionResult]],
     use_excel: bool = False,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> None:
     """
     Write multiple extraction results to a folder with one file per result.
@@ -367,10 +369,12 @@ def write_extraction_results_to_folder(
     :param output_dir: directory to write results to (created if it doesn't exist)
     :param results: list of (filename_or_relative_path, ExtractionResult) tuples
     :param use_excel: whether to write Excel files (True) or CSV files (False)
+    :param on_progress: optional callback (current, total) called after each file is written
+    :return: None
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    for filename, result in results:
+    for i, (filename, result) in enumerate(results):
         extension = "xlsx" if use_excel else "csv"
         file_path = output_dir / f"{filename}-extracted.{extension}"
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -378,3 +382,6 @@ def write_extraction_results_to_folder(
             result.write_excel(file_path)
         else:
             result.write_csv(file_path)
+
+        if on_progress:
+            on_progress(i + 1, len(results))
