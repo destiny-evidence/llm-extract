@@ -150,11 +150,17 @@ def extract_folder(
             )
 
         # Batch processing (show progress bar only if on_progress callback is provided)
+        # timeout=0 disables DSPy's straggler resubmission: it would otherwise resubmit
+        # any call running past its own 120s default without cancelling the original
+        # thread, leaving duplicate in-flight LLM requests running after batch() returns.
+        # LLM_EXTRACT_TIMEOUT (litellm.request_timeout) is already the source of truth
+        # for per-call timeouts, so DSPy doesn't need to enforce a second one.
         predictions, failed_examples, exceptions = extractor.batch(
             examples,
             num_threads=max_concurrent,
             disable_progress_bar=(on_progress is None),
             return_failed_examples=True,
+            timeout=0,
         )
 
         # Map results back using natural index correspondence
