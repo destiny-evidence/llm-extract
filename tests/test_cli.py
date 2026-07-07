@@ -63,12 +63,12 @@ def mock_pipeline():
     mock_attrs = MagicMock()
 
     with (
-        patch("llm_extract.cli.configure_dspy") as mock_configure,
-        patch("llm_extract.cli.load_csv") as mock_load,
+        patch("llm_extract.cli.file.configure_dspy") as mock_configure,
+        patch("llm_extract.cli.common.load_csv") as mock_load,
         patch(
-            "llm_extract.cli.build_attributes_from_csv", return_value=mock_attrs
+            "llm_extract.cli.common.build_attributes_from_csv", return_value=mock_attrs
         ) as mock_build_csv,
-        patch("llm_extract.cli.extract", return_value=mock_result) as mock_extract,
+        patch("llm_extract.cli.file.extract", return_value=mock_result) as mock_extract,
     ):
         yield {
             "configure": mock_configure,
@@ -90,10 +90,10 @@ def mock_excel_pipeline():
     ]
 
     with (
-        patch("llm_extract.cli.configure_dspy") as mock_configure,
-        patch("llm_extract.cli.load_workbook") as mock_load_sheets,
-        patch("llm_extract.cli.build_attributes_from_workbook") as mock_build,
-        patch("llm_extract.cli.extract", return_value=mock_result) as mock_extract,
+        patch("llm_extract.cli.file.configure_dspy") as mock_configure,
+        patch("llm_extract.cli.common.load_workbook") as mock_load_sheets,
+        patch("llm_extract.cli.common.build_attributes_from_workbook") as mock_build,
+        patch("llm_extract.cli.file.extract", return_value=mock_result) as mock_extract,
     ):
         yield {
             "configure": mock_configure,
@@ -111,13 +111,15 @@ def mock_folder_pipeline():
     mock_result.write_csv = MagicMock()
 
     with (
-        patch("llm_extract.cli.configure_dspy") as mock_configure,
-        patch("llm_extract.cli.load_csv") as mock_load,
+        patch("llm_extract.cli.folder.configure_dspy") as mock_configure,
+        patch("llm_extract.cli.common.load_csv") as mock_load,
         patch(
-            "llm_extract.cli.extract_folder",
+            "llm_extract.cli.folder.extract_folder",
             return_value=[("file1", mock_result), ("file2", mock_result)],
         ) as mock_extract_folder,
-        patch("llm_extract.cli.write_extraction_results_to_folder") as mock_write,
+        patch(
+            "llm_extract.cli.folder.write_extraction_results_to_folder"
+        ) as mock_write,
     ):
         yield {
             "configure": mock_configure,
@@ -358,7 +360,7 @@ def test_file_with_excel_attrs_and_type(
 def test_file_with_excel_attrs_missing_type_errors(
     source_file, excel_attrs_file
 ) -> None:
-    with patch("llm_extract.cli.configure_dspy"):
+    with patch("llm_extract.cli.file.configure_dspy"):
         result = runner.invoke(
             app,
             ["file", "--source", str(source_file), "--attrs", str(excel_attrs_file)],
@@ -588,7 +590,7 @@ def test_folder_partial_files_found(
 
 
 def test_folder_unsupported_filetype(source_folder, attrs_file) -> None:
-    with patch("llm_extract.cli.configure_dspy"):
+    with patch("llm_extract.cli.folder.configure_dspy"):
         result = runner.invoke(
             app,
             [
@@ -650,8 +652,8 @@ def test_folder_nonexistent_attrs_file(source_folder, tmp_path) -> None:
 def test_folder_file_path_as_output_errors(source_folder, attrs_file, tmp_path) -> None:
     output_file = tmp_path / "results.csv"
     with (
-        patch("llm_extract.cli.configure_dspy"),
-        patch("llm_extract.cli.load_csv") as mock_load,
+        patch("llm_extract.cli.folder.configure_dspy"),
+        patch("llm_extract.cli.common.load_csv") as mock_load,
     ):
         mock_load.return_value = []
         result = runner.invoke(
