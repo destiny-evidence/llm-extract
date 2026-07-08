@@ -102,24 +102,130 @@ def _flatten_instance(instance: object, dataclass_type: type, prefix: str = "") 
     return row
 
 
+def _flatten_list_fields(
+    instance: object, dataclass_type: type, prefix: str = ""
+) -> list[tuple[str, type, list]]:
+    """
+    Find dot-prefixed columns (matching :func:`_flatten_columns`' naming) whose field
+    type is `list[dataclass]`, recursing through nested singular dataclasses the same
+    way `_flatten_columns` does so the two stay in sync.
+
+    A `list[dataclass]` field can't be inlined as fixed columns (arbitrary length), so
+    instead of JSON-encoding it into one cell, callers use this to spawn a pooled child
+    table for `elem_type` and link to it.
+
+    :param instance: the dataclass instance to inspect, or None
+    :param dataclass_type: the dataclass type describing `instance`'s shape
+    :param prefix: prefix to prepend to each column name
+    :return: list of (column_name, element dataclass type, list of item instances)
+    """
+    results = []
+    for field in dataclasses.fields(dataclass_type):
+        inner_type = _unwrap_optional(field.type)
+        name = f"{prefix}{field.name}"
+        value = getattr(instance, field.name, None) if instance is not None else None
+        if dataclasses.is_dataclass(inner_type):
+            results.extend(_flatten_list_fields(value, inner_type, prefix=f"{name}."))
+        elif typing.get_origin(inner_type) is list:
+            (elem_type,) = typing.get_args(inner_type)
+            if dataclasses.is_dataclass(elem_type):
+                results.append((name, elem_type, value or []))
+    return results
+
+
+@dataclasses.dataclass(frozen=True)
+class _SheetLink:
+    """Placeholder cell value meaning "link to this other sheet" rather than raw data."""
+
+    sheet_name: str
+
+
 @dataclasses.dataclass
-class _AttributeTable:
-    """Flattened tabular data for a found custom-type attribute."""
+class _Table:
+    """
+    Flattened tabular data for a custom-type attribute or a pooled list[dataclass] field.
+
+    `include_parent_columns` distinguishes root attribute tables (exactly one implicit
+    parent - the Summary row, so a parent link adds no information) from pooled child
+    tables (reached from a list[dataclass] field at any depth, which can have rows from
+    multiple distinct parent rows, so each row needs its own parent link).
+    """
 
     columns: list[str]
     rows: list[list]
+    parent_refs: list[tuple[str, int]] = dataclasses.field(default_factory=list)
+    include_parent_columns: bool = False
 
 
-def _classify_attribute(attr: Attribute, prediction: dspy.Prediction) -> object:
+def _process_record(
+    instance: object,
+    dataclass_type: type,
+    sheet_name: str,
+    parent_ref: tuple[str, int] | None,
+    tables: dict[str, _Table],
+    include_parent_columns: bool,
+) -> int:
+    """
+    Flatten `instance` into a new row of `tables[sheet_name]`, creating the table on
+    first use, and recurse into any nested list[dataclass] fields (at any depth) to
+    populate their own pooled child tables instead of JSON-encoding them into one cell.
+
+    :param instance: the dataclass instance to flatten into a row
+    :param dataclass_type: the dataclass type describing `instance`'s shape
+    :param sheet_name: name of the table this row belongs to
+    :param parent_ref: (parent_sheet_name, parent_row_number) this row is linked from,
+                        or None for a root attribute's table
+    :param tables: shared dict of sheet name to `_Table`, populated in place
+    :param include_parent_columns: whether this row should carry a parent link
+    :return: 1-indexed row number of the newly appended row within `tables[sheet_name]`
+    """
+    columns = _flatten_columns(dataclass_type)
+    values = _flatten_instance(instance, dataclass_type)
+    list_fields = _flatten_list_fields(instance, dataclass_type)
+
+    table = tables.setdefault(
+        sheet_name,
+        _Table(columns=columns, rows=[], include_parent_columns=include_parent_columns),
+    )
+    row_values = [values[column] for column in columns]
+    row_number = len(table.rows) + 1
+
+    for column_name, elem_type, sub_items in list_fields:
+        col_index = columns.index(column_name)
+        if not sub_items:
+            row_values[col_index] = NOT_FOUND
+            continue
+        child_sheet = _sanitize_sheet_name(elem_type.__name__)
+        row_values[col_index] = _SheetLink(child_sheet)
+        for sub_item in sub_items:
+            _process_record(
+                sub_item,
+                elem_type,
+                child_sheet,
+                (sheet_name, row_number),
+                tables,
+                include_parent_columns=True,
+            )
+
+    table.rows.append(row_values)
+    if include_parent_columns:
+        table.parent_refs.append(parent_ref)
+    return row_number
+
+
+def _classify_attribute(
+    attr: Attribute, prediction: dspy.Prediction, tables: dict[str, _Table]
+) -> object:
     """
     Classify a top-level attribute's value for presentation.
 
     :param attr: the attribute definition, used for its type
     :param prediction: the DSPy Prediction holding the extracted value
-    :return: an `_AttributeTable` if `attr` is a custom type (or a list of
-             one) with a non-empty value, NOT_FOUND if it's a custom type
-             with no value, otherwise the value formatted via
-             :func:`_format_value`
+    :param tables: shared dict of sheet name to `_Table`, populated in place for
+                    custom-type attributes
+    :return: a `_SheetLink` if `attr` is a custom type (or a list of one) with a
+             non-empty value, NOT_FOUND if it's a custom type with no value, otherwise
+             the value formatted via :func:`_format_value`
     """
     value = getattr(prediction, attr.name, None)
     inner_type = _unwrap_optional(attr.attr_type)
@@ -139,12 +245,25 @@ def _classify_attribute(attr: Attribute, prediction: dspy.Prediction) -> object:
     if not items:
         return NOT_FOUND
 
-    columns = _flatten_columns(dataclass_type)
-    rows = [
-        [_flatten_instance(item, dataclass_type)[column] for column in columns]
-        for item in items
-    ]
-    return _AttributeTable(columns, rows)
+    sheet_name = _sanitize_sheet_name(attr.name)
+    for item in items:
+        _process_record(
+            item, dataclass_type, sheet_name, None, tables, include_parent_columns=False
+        )
+    return _SheetLink(sheet_name)
+
+
+def _render_cell_for_display(value: object) -> object:
+    """
+    Convert a `_SheetLink` placeholder into console-friendly text; pass through anything
+    else unchanged.
+
+    :param value: a cell value, possibly a `_SheetLink`
+    :return: display-ready value
+    """
+    if isinstance(value, _SheetLink):
+        return f"see '{value.sheet_name}' table below"
+    return value
 
 
 _MAX_COLUMN_WIDTH = 40
@@ -280,12 +399,18 @@ class ExtractionResult:
         A "Summary" sheet has one row per top-level attribute. Plain
         attributes show their formatted value directly. Attributes that are
         a custom type, or a non-empty list of a custom type, instead get a
-        link to a dedicated sheet: one row per item, with columns for each
-        field. Fields that are themselves a custom type one level deep are
-        flattened into dot-prefixed columns (e.g.
-        "intervention_type.type_of_intervention"); any deeper nesting falls
-        back to a JSON-encoded cell. Custom-type attributes with no value are
-        shown as NOT_FOUND in the Summary sheet, with no dedicated sheet.
+        link to a dedicated sheet named after the attribute: one row per
+        item, with columns for each field. Fields that are themselves a
+        custom type are flattened into dot-prefixed columns (e.g.
+        "intervention_type.type_of_intervention"), at any nesting depth.
+        Fields that are a *list* of a custom type - at any depth, not just
+        top-level attributes - instead link to their own sheet named after
+        that type, pooling every instance of it found anywhere in the
+        results. Each row in a pooled sheet carries "_parent_sheet" and
+        "_parent_row" columns identifying the specific row that produced it,
+        since a pooled type can be reached from more than one place.
+        Custom-type attributes with no value are shown as NOT_FOUND in the
+        Summary sheet, with no dedicated sheet.
 
         :param path: destination file path
         """
@@ -294,21 +419,48 @@ class ExtractionResult:
         summary = workbook.create_sheet("Summary")
         summary.append(["name", "value"])
 
+        tables: dict[str, _Table] = {}
         for attr in self.attributes:
-            result = _classify_attribute(attr, self.prediction)
-            if isinstance(result, _AttributeTable):
-                sheet_name = _sanitize_sheet_name(attr.name)
-                sheet = workbook.create_sheet(sheet_name)
-                sheet.append(result.columns)
-                for row in result.rows:
-                    sheet.append(row)
-                _append_link_row(summary, attr.name, sheet_name)
+            result = _classify_attribute(attr, self.prediction, tables)
+            if isinstance(result, _SheetLink):
+                _append_link_row(summary, attr.name, result.sheet_name)
             else:
                 summary.append([attr.name, result])
 
         reasoning = getattr(self.prediction, "reasoning", None)
         if reasoning is not None:
             summary.append(["_reasoning_", reasoning])
+
+        for sheet_name, table in tables.items():
+            sheet = workbook.create_sheet(sheet_name)
+            header = (
+                ["_parent_sheet", "_parent_row"] + table.columns
+                if table.include_parent_columns
+                else table.columns
+            )
+            sheet.append(header)
+
+            parent_refs = (
+                table.parent_refs
+                if table.include_parent_columns
+                else [None] * len(table.rows)
+            )
+            link_offset = 2 if table.include_parent_columns else 0
+            for row_values, parent_ref in zip(table.rows, parent_refs):
+                display_values = [
+                    v.sheet_name if isinstance(v, _SheetLink) else v for v in row_values
+                ]
+                if table.include_parent_columns:
+                    display_values = [parent_ref[0], parent_ref[1]] + display_values
+                sheet.append(display_values)
+
+                for col_index, value in enumerate(row_values):
+                    if isinstance(value, _SheetLink):
+                        cell = sheet.cell(
+                            row=sheet.max_row, column=col_index + 1 + link_offset
+                        )
+                        cell.hyperlink = f"#'{value.sheet_name}'!A1"
+                        cell.style = "Hyperlink"
 
         workbook.save(path)
 
@@ -321,9 +473,13 @@ class ExtractionResult:
         attributes are printed in that list as before, but attributes that
         are a custom type, or a non-empty list of a custom type, are instead
         printed as their own titled table below the list, with one row per
-        item and a column per (flattened) field. Custom types with no value
-        show NOT_FOUND in the list instead. Reasoning, if present, is
-        appended to the list.
+        item and a column per (flattened) field, at any nesting depth. A
+        field that is itself a *list* of a custom type gets its own titled
+        table, pooling every instance of that type found anywhere in the
+        results, with "_parent_sheet"/"_parent_row" columns identifying
+        which row produced each one. Custom types with no value show
+        NOT_FOUND in the list instead. Reasoning, if present, is appended to
+        the list.
         """
         if not self.attributes:
             rows = self.to_csv_rows()
@@ -332,13 +488,14 @@ class ExtractionResult:
                 print(f"{str(row[0]).ljust(name_width)}  {row[1]}")
             return
 
+        tables: dict[str, _Table] = {}
         summary_rows = [["name", "value"]]
-        tables = []
         for attr in self.attributes:
-            result = _classify_attribute(attr, self.prediction)
-            if isinstance(result, _AttributeTable):
-                tables.append((attr.name, result))
-                summary_rows.append([attr.name, f"see '{attr.name}' table below"])
+            result = _classify_attribute(attr, self.prediction, tables)
+            if isinstance(result, _SheetLink):
+                summary_rows.append(
+                    [attr.name, f"see '{result.sheet_name}' table below"]
+                )
             else:
                 summary_rows.append([attr.name, result])
 
@@ -350,8 +507,24 @@ class ExtractionResult:
         for row in summary_rows:
             print(f"{str(row[0]).ljust(name_width)}  {row[1]}")
 
-        for name, table in tables:
-            _print_table(name, table.columns, table.rows)
+        for sheet_name, table in tables.items():
+            columns = (
+                ["_parent_sheet", "_parent_row"] + table.columns
+                if table.include_parent_columns
+                else table.columns
+            )
+            parent_refs = (
+                table.parent_refs
+                if table.include_parent_columns
+                else [None] * len(table.rows)
+            )
+            rows = []
+            for row_values, parent_ref in zip(table.rows, parent_refs):
+                display_row = [_render_cell_for_display(v) for v in row_values]
+                if table.include_parent_columns:
+                    display_row = [parent_ref[0], parent_ref[1]] + display_row
+                rows.append(display_row)
+            _print_table(sheet_name, columns, rows)
 
 
 def write_extraction_results_to_folder(

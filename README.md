@@ -212,8 +212,9 @@ Custom-type attributes are JSON-encoded in their cell.
 Results are written to a multi-sheet workbook:
 
 - A **"Summary"** sheet has one row per top-level attribute. Plain attributes show their value directly.
-- Attributes with a custom type (or a non-empty list of one) get a hyperlink in the Summary sheet to a dedicated sheet, with one row per item and one column per field.
-- Fields that are themselves a custom type one level deep are flattened into dot-prefixed columns (e.g. `intervention_type.type_of_intervention`). Any deeper nesting falls back to a JSON-encoded cell.
+- Attributes with a custom type (or a non-empty list of one) get a hyperlink in the Summary sheet to a dedicated sheet named after the attribute, with one row per item and one column per field.
+- Fields that are themselves a custom type are flattened into dot-prefixed columns (e.g. `intervention_type.type_of_intervention`), at any nesting depth.
+- Fields that are a **list** of a custom type — at any nesting depth, not just top-level attributes — get a hyperlink to their own sheet named after that type, instead of a JSON-encoded cell. All instances of that type found anywhere in the results are pooled into the same sheet, each row tagged with `_parent_sheet`/`_parent_row` columns identifying which specific row it belongs to (since a type can be reached from more than one place).
 - Custom-type attributes with no value show `NOT_FOUND` in the Summary sheet, with no dedicated sheet created.
 
 Two special values may appear in any output format:

@@ -321,7 +321,7 @@ def test_write_excel_empty_list_custom_type_has_not_found_in_summary_and_no_shee
     assert ("interventions", NOT_FOUND) in summary_rows
 
 
-def test_write_excel_deep_nesting_falls_back_to_json(tmp_path) -> None:
+def test_write_excel_deeply_nested_list_gets_own_pooled_sheet(tmp_path) -> None:
     result = ExtractionResult(
         prediction=dspy.Prediction(
             outcomes=[
@@ -349,7 +349,58 @@ def test_write_excel_deep_nesting_falls_back_to_json(tmp_path) -> None:
     rows = list(workbook["outcomes"].iter_rows(values_only=True))
     assert rows[0] == ("name", "category.value", "sub_interventions")
     assert rows[1][0:2] == ("BPRS score", "Mental Health Outcome")
-    assert rows[1][2] == ('[{"group_name": "Risperidone", "intervention_type": null}]')
+    assert rows[1][2] == "_Intervention"
+
+    link_cell = workbook["outcomes"]["C2"]
+    assert link_cell.hyperlink.target == "#'_Intervention'!A1"
+
+    intervention_rows = list(workbook["_Intervention"].iter_rows(values_only=True))
+    assert intervention_rows[0] == (
+        "_parent_sheet",
+        "_parent_row",
+        "group_name",
+        "intervention_type.type_of_intervention",
+    )
+    assert intervention_rows[1] == ("outcomes", 1, "Risperidone", NOT_FOUND)
+
+
+def test_write_excel_pooled_sheet_links_multiple_parent_rows(tmp_path) -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(
+            outcomes=[
+                _Outcome(
+                    name="BPRS score",
+                    category=None,
+                    sub_interventions=[
+                        _Intervention(group_name="Risperidone", intervention_type=None)
+                    ],
+                ),
+                _Outcome(
+                    name="CGI score",
+                    category=None,
+                    sub_interventions=[
+                        _Intervention(group_name="Haloperidol", intervention_type=None),
+                        _Intervention(group_name="Placebo", intervention_type=None),
+                    ],
+                ),
+            ]
+        ),
+        attributes=[
+            Attribute(
+                name="outcomes",
+                attr_type=typing.Optional[list[_Outcome]],
+                description="",
+            ),
+        ],
+    )
+    output = tmp_path / "results.xlsx"
+    result.write_excel(output)
+
+    workbook = openpyxl.load_workbook(output)
+    intervention_rows = list(workbook["_Intervention"].iter_rows(values_only=True))
+    assert intervention_rows[1] == ("outcomes", 1, "Risperidone", NOT_FOUND)
+    assert intervention_rows[2] == ("outcomes", 2, "Haloperidol", NOT_FOUND)
+    assert intervention_rows[3] == ("outcomes", 2, "Placebo", NOT_FOUND)
 
 
 # --- display with attribute metadata ---
