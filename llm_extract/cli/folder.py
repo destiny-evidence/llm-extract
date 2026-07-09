@@ -79,6 +79,15 @@ def folder(
         dir_okay=True,
         writable=True,
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        is_flag=True,
+        help=(
+            "Additionally write a <filename>-extracted.json file per result, "
+            "preserving the full nested structure for programmatic use."
+        ),
+    ),
 ) -> None:
     """Extract structured attributes from multiple files in a folder (text or PDF)."""
     filetypes = _validate_filetypes(filetypes)
@@ -109,6 +118,7 @@ def folder(
         output_dir,
         results,
         use_excel=use_excel,
+        also_json=json_output,
         on_progress=_make_export_progress_callback(),
     )
     typer.echo(f"Extracted {len(results)} files to {output_dir}")

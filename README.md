@@ -144,6 +144,7 @@ This traverses all subdirectories and recreates the folder structure in the outp
 | `--env` | No | Path to a `.env` file (overrides all other credential sources) |
 | `--with-reasoning` | No | Enable chain-of-thought reasoning. Adds a `_reasoning_` row to the output explaining the extraction. Off by default. |
 | `--output` | No | **File mode:** Where to write results. Pass a `.csv` or `.xlsx` file path, or a directory to auto-name the file. If omitted, results print to console. **Folder mode:** Directory to write results to. Each file becomes `<filename>-extracted.csv` or `.xlsx`. Defaults to `<source>-extracted/` in the same parent directory. |
+| `--json` | No | Additionally write a `<name>-extracted.json` file alongside the csv/xlsx output, preserving the full nested structure for programmatic use. See [JSON](#json---json). |
 
 ### Folder-only options
 
@@ -217,10 +218,24 @@ Results are written to a multi-sheet workbook:
 - Fields that are a **list** of a custom type — at any nesting depth, not just top-level attributes — get a hyperlink to their own sheet named after that type, instead of a JSON-encoded cell. All instances of that type found anywhere in the results are pooled into the same sheet, each row tagged with `_parent_sheet`/`_parent_row` columns identifying which specific row it belongs to (since a type can be reached from more than one place).
 - Custom-type attributes with no value show `NOT_FOUND` in the Summary sheet, with no dedicated sheet created.
 
+#### JSON (`--json`)
+
+Pass `--json` alongside (not instead of) `--output` to additionally write a `<name>-extracted.json` file, preserving the full nested structure exactly as extracted — no flattening, no JSON-encoded cells. This is the format to reach for when you want to consume results in another program or script, rather than open them in Excel:
+
+```json
+{
+  "product_name": "Aeron Chair by Herman Miller",
+  "price": 1495.0,
+  "in_stock": true
+}
+```
+
+Missing values are `NOT_FOUND`, matching CSV/Excel, applied at any nesting depth (e.g. a field inside a custom type, not just top-level attributes), and `_reasoning_` is included as a top-level key when `--with-reasoning` was used. Custom types and lists of custom types appear as ordinary nested JSON objects/arrays.
+
 Two special values may appear in any output format:
 
 - **`NOT_FOUND`** — the attribute was not present in the source text.
-- **`_reasoning_`** — a row containing the LLM's chain-of-thought explanation for the extraction (last row in CSV/Summary). Only present when `--with-reasoning` was used.
+- **`_reasoning_`** — a row containing the LLM's chain-of-thought explanation for the extraction (last row in CSV/Summary, or a top-level key in JSON). Only present when `--with-reasoning` was used.
 
 ### Defining attributes
 

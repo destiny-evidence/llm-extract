@@ -63,6 +63,16 @@ def file(
         dir_okay=True,
         writable=True,
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        is_flag=True,
+        help=(
+            "Additionally write a <source>-extracted.json file, preserving the "
+            "full nested structure for programmatic use. Named after --output "
+            "(or, if --output is omitted, next to --source)."
+        ),
+    ),
 ) -> None:
     """Extract structured attributes from a single file (text or PDF)."""
     is_pdf = source.suffix.lower() == ".pdf"
@@ -77,6 +87,7 @@ def file(
     )
     if output is None:
         result.display()
+        json_path = source.parent / f"{source.stem}-extracted.json"
     else:
         if output.is_dir():
             extension = "xlsx" if attrs.suffix.lower() in EXCEL_SUFFIXES else "csv"
@@ -85,6 +96,10 @@ def file(
             result.write_excel(output)
         else:
             result.write_csv(output)
+        json_path = output.with_suffix(".json")
+
+    if json_output:
+        result.write_json(json_path)
 
 
 def _file_progress_callback(

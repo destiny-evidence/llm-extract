@@ -1,3 +1,4 @@
+import json
 import typing
 
 import dspy
@@ -5,7 +6,12 @@ import openpyxl
 from pydantic import Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from llm_extract.export import ExtractionResult, NOT_FOUND, _format_value
+from llm_extract.export import (
+    ExtractionResult,
+    NOT_FOUND,
+    _format_value,
+    write_extraction_results_to_folder,
+)
 from llm_extract.models import Attribute
 
 
@@ -486,6 +492,189 @@ def test_display_with_missing_custom_type_shows_not_found(capsys) -> None:
     assert any(line.startswith("interventions") and NOT_FOUND in line for line in lines)
 
 
+# --- to_json / write_json ---
+
+
+def test_to_json_plain_attrs() -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(product_name="Widget", price=14.99),
+        attributes=[
+            Attribute(
+                name="product_name", attr_type=typing.Optional[str], description=""
+            ),
+            Attribute(name="price", attr_type=typing.Optional[float], description=""),
+        ],
+    )
+    assert result.to_json() == {"product_name": "Widget", "price": 14.99}
+
+
+def test_to_json_missing_value_is_not_found() -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(product_name=None),
+        attributes=[
+            Attribute(
+                name="product_name", attr_type=typing.Optional[str], description=""
+            ),
+        ],
+    )
+    assert result.to_json() == {"product_name": NOT_FOUND}
+
+
+def test_to_json_no_reasoning_key_when_absent() -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(product_name="Widget"),
+        attributes=[
+            Attribute(
+                name="product_name", attr_type=typing.Optional[str], description=""
+            ),
+        ],
+    )
+    assert "_reasoning_" not in result.to_json()
+
+
+def test_to_json_reasoning_included_as_underscored_key() -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(product_name="Widget", reasoning="Found in line 1."),
+        attributes=[
+            Attribute(
+                name="product_name", attr_type=typing.Optional[str], description=""
+            ),
+        ],
+    )
+    assert result.to_json()["_reasoning_"] == "Found in line 1."
+
+
+def test_to_json_without_attributes_falls_back_to_prediction_keys() -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(product_name="Widget", price=14.99)
+    )
+    assert result.to_json() == {"product_name": "Widget", "price": 14.99}
+
+
+def test_to_json_nested_custom_type_preserved_as_plain_dict() -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(
+            lead_intervention=_Intervention(
+                group_name="Risperidone",
+                intervention_type=_InterventionType("Intervention"),
+            )
+        ),
+        attributes=[
+            Attribute(
+                name="lead_intervention",
+                attr_type=typing.Optional[_Intervention],
+                description="",
+            ),
+        ],
+    )
+    assert result.to_json() == {
+        "lead_intervention": {
+            "group_name": "Risperidone",
+            "intervention_type": {"type_of_intervention": "Intervention"},
+        }
+    }
+
+
+def test_to_json_list_of_custom_type_preserved_as_plain_list() -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(
+            interventions=[
+                _Intervention(group_name="Risperidone", intervention_type=None),
+                _Intervention(group_name="Haloperidol", intervention_type=None),
+            ]
+        ),
+        attributes=[
+            Attribute(
+                name="interventions",
+                attr_type=typing.Optional[list[_Intervention]],
+                description="",
+            ),
+        ],
+    )
+    assert result.to_json() == {
+        "interventions": [
+            {"group_name": "Risperidone", "intervention_type": NOT_FOUND},
+            {"group_name": "Haloperidol", "intervention_type": NOT_FOUND},
+        ]
+    }
+
+
+def test_to_json_deeply_nested_list_preserved_without_flattening() -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(
+            outcomes=[
+                _Outcome(
+                    name="BPRS score",
+                    category=_OutcomeCategory("Mental Health Outcome"),
+                    sub_interventions=[
+                        _Intervention(group_name="Risperidone", intervention_type=None)
+                    ],
+                )
+            ]
+        ),
+        attributes=[
+            Attribute(
+                name="outcomes",
+                attr_type=typing.Optional[list[_Outcome]],
+                description="",
+            ),
+        ],
+    )
+    assert result.to_json() == {
+        "outcomes": [
+            {
+                "name": "BPRS score",
+                "category": {"value": "Mental Health Outcome"},
+                "sub_interventions": [
+                    {"group_name": "Risperidone", "intervention_type": NOT_FOUND}
+                ],
+            }
+        ]
+    }
+
+
+def test_write_json_creates_file(tmp_path) -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(product_name="Widget"),
+        attributes=[
+            Attribute(
+                name="product_name", attr_type=typing.Optional[str], description=""
+            ),
+        ],
+    )
+    output = tmp_path / "results.json"
+    result.write_json(output)
+    assert output.exists()
+
+
+def test_write_json_content_round_trips_via_json_load(tmp_path) -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(
+            lead_intervention=_Intervention(
+                group_name="Risperidone", intervention_type=None
+            )
+        ),
+        attributes=[
+            Attribute(
+                name="lead_intervention",
+                attr_type=typing.Optional[_Intervention],
+                description="",
+            ),
+        ],
+    )
+    output = tmp_path / "results.json"
+    result.write_json(output)
+
+    with output.open() as f:
+        loaded = json.load(f)
+    assert loaded == {
+        "lead_intervention": {
+            "group_name": "Risperidone",
+            "intervention_type": NOT_FOUND,
+        }
+    }
+
+
 def test_display_truncates_long_cell_values(capsys) -> None:
     long_value = "x" * 100
     result = ExtractionResult(
@@ -505,3 +694,48 @@ def test_display_truncates_long_cell_values(capsys) -> None:
 
     for line in output.splitlines():
         assert len(line) < len(long_value)
+
+
+# --- write_extraction_results_to_folder ---
+
+
+def test_write_extraction_results_to_folder_json_not_written_by_default(
+    tmp_path,
+) -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(product_name="Widget"),
+        attributes=[
+            Attribute(
+                name="product_name", attr_type=typing.Optional[str], description=""
+            ),
+        ],
+    )
+    output_dir = tmp_path / "out"
+    write_extraction_results_to_folder(output_dir, [("file1", result)])
+
+    assert (output_dir / "file1-extracted.csv").exists()
+    assert not (output_dir / "file1-extracted.json").exists()
+
+
+def test_write_extraction_results_to_folder_also_json_writes_both_formats(
+    tmp_path,
+) -> None:
+    result = ExtractionResult(
+        prediction=dspy.Prediction(product_name="Widget"),
+        attributes=[
+            Attribute(
+                name="product_name", attr_type=typing.Optional[str], description=""
+            ),
+        ],
+    )
+    output_dir = tmp_path / "out"
+    write_extraction_results_to_folder(
+        output_dir, [("file1", result)], use_excel=True, also_json=True
+    )
+
+    assert (output_dir / "file1-extracted.xlsx").exists()
+    assert (output_dir / "file1-extracted.json").exists()
+
+    with (output_dir / "file1-extracted.json").open() as f:
+        loaded = json.load(f)
+    assert loaded == {"product_name": "Widget"}

@@ -31,6 +31,24 @@ def _format_value(value: object) -> object:
     return value
 
 
+def _apply_not_found_sentinel(value: object) -> object:
+    """
+    Recursively replace `None` with the NOT_FOUND sentinel, matching the
+    missing-value convention CSV/Excel already apply via `_format_value`.
+
+    :param value: a plain JSON-able value (e.g. from `to_jsonable_python`),
+                   possibly containing `None` at any nesting depth
+    :return: the same structure with every `None` replaced by NOT_FOUND
+    """
+    if value is None:
+        return NOT_FOUND
+    if isinstance(value, list):
+        return [_apply_not_found_sentinel(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _apply_not_found_sentinel(v) for k, v in value.items()}
+    return value
+
+
 def _unwrap_optional(type_: object) -> object:
     """
     Unwrap an `Optional[X]` annotation to `X`.
@@ -392,6 +410,47 @@ class ExtractionResult:
             writer = csv.writer(f)
             writer.writerows(self.to_csv_rows())
 
+    def to_json(self) -> dict:
+        """
+        Serialise extraction results to a plain JSON-able dict, preserving the
+        full nested structure (no flattening, no JSON-in-a-cell).
+
+        :return: dict mapping each attribute name to its value, converted via
+                 `to_jsonable_python` (handles our pydantic-dataclass-based
+                 custom types, which `Prediction.toDict()` does not - it only
+                 recognises genuine `pydantic.BaseModel` instances). Missing
+                 values are the NOT_FOUND sentinel, matching CSV/Excel, applied
+                 at any nesting depth (e.g. a null field inside a custom type,
+                 or a missing custom-type attribute). Includes a "_reasoning_"
+                 key if reasoning was produced.
+        """
+        keys = [attr.name for attr in self.attributes] or [
+            k for k in self.prediction.keys() if k != "reasoning"
+        ]
+        result = {
+            key: _apply_not_found_sentinel(
+                to_jsonable_python(getattr(self.prediction, key, None))
+            )
+            for key in keys
+        }
+
+        reasoning = getattr(self.prediction, "reasoning", None)
+        if reasoning is not None:
+            result["_reasoning_"] = reasoning
+
+        return result
+
+    def write_json(self, path: Path) -> None:
+        """
+        Write extraction results to a JSON file, preserving the full nested
+        structure so results can be consumed programmatically without
+        parsing CSV/Excel.
+
+        :param path: destination file path
+        """
+        with path.open("w") as f:
+            json.dump(self.to_json(), f, indent=2)
+
     def write_excel(self, path: Path) -> None:
         """
         Write extraction results to an Excel workbook.
@@ -531,6 +590,7 @@ def write_extraction_results_to_folder(
     output_dir: Path,
     results: list[tuple[str, ExtractionResult]],
     use_excel: bool = False,
+    also_json: bool = False,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> None:
     """
@@ -542,6 +602,8 @@ def write_extraction_results_to_folder(
     :param output_dir: directory to write results to (created if it doesn't exist)
     :param results: list of (filename_or_relative_path, ExtractionResult) tuples
     :param use_excel: whether to write Excel files (True) or CSV files (False)
+    :param also_json: whether to additionally write a <filename>-extracted.json
+                       file alongside the csv/xlsx file, for programmatic consumption
     :param on_progress: optional callback (current, total) called after each file is written
     :return: None
     """
@@ -555,6 +617,9 @@ def write_extraction_results_to_folder(
             result.write_excel(file_path)
         else:
             result.write_csv(file_path)
+
+        if also_json:
+            result.write_json(output_dir / f"{filename}-extracted.json")
 
         if on_progress:
             on_progress(i + 1, len(results))
