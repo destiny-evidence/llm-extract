@@ -2,7 +2,6 @@ import csv
 import dataclasses
 import json
 import re
-import shutil
 import typing
 from pathlib import Path
 from typing import Callable
@@ -23,10 +22,9 @@ def _format_value(value: object) -> object:
         return NOT_FOUND
     if isinstance(value, str):
         return value.strip("\"'")
-    if isinstance(value, (list, dict)) or dataclasses.is_dataclass(value):
-        # Custom types from Excel templates are nested pydantic dataclasses,
-        # which json.dumps can't serialise directly - convert to plain
-        # dicts/lists first, recursing through any nesting.
+    if isinstance(value, (list, dict)):
+        # e.g. a list[type] value from a plain CSV attrs file - to_jsonable_python
+        # handles any nesting consistently before json.dumps.
         return json.dumps(to_jsonable_python(value))
     return value
 
@@ -271,93 +269,6 @@ def _classify_attribute(
     return _SheetLink(sheet_name)
 
 
-def _render_cell_for_display(value: object) -> object:
-    """
-    Convert a `_SheetLink` placeholder into console-friendly text; pass through anything
-    else unchanged.
-
-    :param value: a cell value, possibly a `_SheetLink`
-    :return: display-ready value
-    """
-    if isinstance(value, _SheetLink):
-        return f"see '{value.sheet_name}' table below"
-    return value
-
-
-_MAX_COLUMN_WIDTH = 40
-_MIN_COLUMN_WIDTH = 10
-
-
-def _format_cell(value: object, width: int) -> str:
-    """
-    Format a value for a table cell, collapsing newlines and truncating.
-
-    :param value: the cell value
-    :param width: maximum display width
-    :return: a single-line string, ellipsised if longer than `width`
-    """
-    text = str(value).replace("\n", " ")
-    if len(text) > width:
-        return text[: width - 1] + "…"
-    return text
-
-
-def _print_table(title: str, columns: list[str], rows: list[list]) -> None:
-    """
-    Print a titled table of flattened attribute rows to stdout.
-
-    Printed as a grid if it fits the terminal width, otherwise as one
-    "column: value" block per row, since a wide grid (e.g. 20+ columns)
-    would just wrap into an unreadable mess.
-
-    :param title: table title, printed above the table
-    :param columns: column headers
-    :param rows: row values, one list per row, matching `columns`
-    """
-    print(f"\n{title}")
-    terminal_width = shutil.get_terminal_size(fallback=(80, 24)).columns
-    widths = [
-        min(_MAX_COLUMN_WIDTH, max(len(col), *(len(str(row[i])) for row in rows)))
-        for i, col in enumerate(columns)
-    ]
-    if sum(widths) + 2 * (len(columns) - 1) <= terminal_width:
-        _print_table_grid(columns, rows, widths)
-    else:
-        _print_table_records(columns, rows, terminal_width)
-
-
-def _print_table_grid(columns: list[str], rows: list[list], widths: list[int]) -> None:
-    """
-    Print rows as a grid, with one column per field.
-
-    :param columns: column headers
-    :param rows: row values, one list per row, matching `columns`
-    :param widths: display width for each column
-    """
-    print("  ".join(_format_cell(col, w).ljust(w) for col, w in zip(columns, widths)))
-    print("  ".join("-" * w for w in widths))
-    for row in rows:
-        print("  ".join(_format_cell(cell, w).ljust(w) for cell, w in zip(row, widths)))
-
-
-def _print_table_records(
-    columns: list[str], rows: list[list], terminal_width: int
-) -> None:
-    """
-    Print rows as one "column: value" block per row.
-
-    :param columns: column headers
-    :param rows: row values, one list per row, matching `columns`
-    :param terminal_width: available width, used to size the value column
-    """
-    name_width = max(len(col) for col in columns)
-    value_width = max(terminal_width - name_width - 2, _MIN_COLUMN_WIDTH)
-    for i, row in enumerate(rows, start=1):
-        print(f"-- item {i} --")
-        for col, value in zip(columns, row):
-            print(f"{col.ljust(name_width)}  {_format_cell(value, value_width)}")
-
-
 def _append_link_row(
     sheet: openpyxl.worksheet.worksheet.Worksheet, name: str, target_sheet_name: str
 ) -> None:
@@ -522,68 +433,6 @@ class ExtractionResult:
                         cell.style = "Hyperlink"
 
         workbook.save(path)
-
-    def display(self) -> None:
-        """
-        Print extraction results to stdout.
-
-        Without attribute metadata, falls back to the same aligned
-        name/value list as `to_csv_rows`. With attribute metadata, plain
-        attributes are printed in that list as before, but attributes that
-        are a custom type, or a non-empty list of a custom type, are instead
-        printed as their own titled table below the list, with one row per
-        item and a column per (flattened) field, at any nesting depth. A
-        field that is itself a *list* of a custom type gets its own titled
-        table, pooling every instance of that type found anywhere in the
-        results, with "_parent_sheet"/"_parent_row" columns identifying
-        which row produced each one. Custom types with no value show
-        NOT_FOUND in the list instead. Reasoning, if present, is appended to
-        the list.
-        """
-        if not self.attributes:
-            rows = self.to_csv_rows()
-            name_width = max(len(str(row[0])) for row in rows)
-            for row in rows:
-                print(f"{str(row[0]).ljust(name_width)}  {row[1]}")
-            return
-
-        tables: dict[str, _Table] = {}
-        summary_rows = [["name", "value"]]
-        for attr in self.attributes:
-            result = _classify_attribute(attr, self.prediction, tables)
-            if isinstance(result, _SheetLink):
-                summary_rows.append(
-                    [attr.name, f"see '{result.sheet_name}' table below"]
-                )
-            else:
-                summary_rows.append([attr.name, result])
-
-        reasoning = getattr(self.prediction, "reasoning", None)
-        if reasoning is not None:
-            summary_rows.append(["_reasoning_", reasoning])
-
-        name_width = max(len(str(row[0])) for row in summary_rows)
-        for row in summary_rows:
-            print(f"{str(row[0]).ljust(name_width)}  {row[1]}")
-
-        for sheet_name, table in tables.items():
-            columns = (
-                ["_parent_sheet", "_parent_row"] + table.columns
-                if table.include_parent_columns
-                else table.columns
-            )
-            parent_refs = (
-                table.parent_refs
-                if table.include_parent_columns
-                else [None] * len(table.rows)
-            )
-            rows = []
-            for row_values, parent_ref in zip(table.rows, parent_refs):
-                display_row = [_render_cell_for_display(v) for v in row_values]
-                if table.include_parent_columns:
-                    display_row = [parent_ref[0], parent_ref[1]] + display_row
-                rows.append(display_row)
-            _print_table(sheet_name, columns, rows)
 
 
 def write_extraction_results_to_folder(

@@ -123,17 +123,17 @@ def test_cli_file_extraction(tmp_path):
             str(FIXTURES / "sample.txt"),
             "--attrs",
             str(FIXTURES / "attributes.csv"),
+            "--output-dir",
+            str(tmp_path),
         ],
     )
 
     assert result.exit_code == 0
-    # Output should contain extracted data
-    assert len(result.stdout) > 0
+    assert (tmp_path / "sample-extracted.csv").exists()
 
 
 def test_cli_file_extraction_to_csv(tmp_path):
     """Test CLI file extraction with CSV output."""
-    output = tmp_path / "result.csv"
     result = runner.invoke(
         app,
         [
@@ -142,12 +142,13 @@ def test_cli_file_extraction_to_csv(tmp_path):
             str(FIXTURES / "sample.txt"),
             "--attrs",
             str(FIXTURES / "attributes.csv"),
-            "--output",
-            str(output),
+            "--output-dir",
+            str(tmp_path),
         ],
     )
 
     assert result.exit_code == 0
+    output = tmp_path / "sample-extracted.csv"
     assert output.exists()
     content = output.read_text()
     assert "name" in content
@@ -166,7 +167,7 @@ def test_cli_folder_extraction_txt_files(tmp_path):
             str(FIXTURES / "attributes.csv"),
             "--filetype",
             "txt",
-            "--output",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -193,7 +194,7 @@ def test_cli_folder_extraction_md_files(tmp_path):
             str(FIXTURES / "attributes.csv"),
             "--filetype",
             "md",
-            "--output",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -219,7 +220,7 @@ def test_cli_folder_extraction_multiple_filetypes(tmp_path):
             "txt",
             "--filetype",
             "md",
-            "--output",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -230,15 +231,16 @@ def test_cli_folder_extraction_multiple_filetypes(tmp_path):
     assert len(extracted_files) == 5
 
 
-def test_cli_folder_extraction_default_output_dir(tmp_path):
-    """Test CLI folder extraction creates default <source>-extracted directory."""
-    # Create a test folder in tmp_path
+def test_cli_folder_extraction_default_output_dir(tmp_path, monkeypatch):
+    """Test CLI folder extraction creates default <source>-extracted directory
+    in the current working directory when --output-dir is omitted."""
+    monkeypatch.chdir(tmp_path)
     source_folder = tmp_path / "test_docs"
     source_folder.mkdir()
     (source_folder / "doc1.txt").write_text("Sample document 1")
     (source_folder / "doc2.txt").write_text("Sample document 2")
 
-    # Run extraction without specifying output
+    # Run extraction without specifying --output-dir
     result = runner.invoke(
         app,
         [
@@ -251,7 +253,7 @@ def test_cli_folder_extraction_default_output_dir(tmp_path):
     )
 
     assert result.exit_code == 0
-    # Should have created test_docs-extracted folder
+    # Should have created test_docs-extracted folder in the cwd (tmp_path)
     expected_output_dir = tmp_path / "test_docs-extracted"
     assert expected_output_dir.exists()
     assert len(list(expected_output_dir.glob("*.csv"))) == 2
@@ -271,7 +273,7 @@ def test_cli_folder_extraction_with_max_concurrent(tmp_path):
             "txt",
             "--max-concurrent",
             "2",
-            "--output",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -294,7 +296,7 @@ def test_cli_folder_extraction_with_reasoning(tmp_path):
             "--filetype",
             "txt",
             "--with-reasoning",
-            "--output",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -324,7 +326,7 @@ def test_cli_folder_extraction_unsupported_filetype(tmp_path):
             str(FIXTURES / "attributes.csv"),
             "--filetype",
             "json",  # Unsupported filetype
-            "--output",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -344,7 +346,7 @@ def test_cli_folder_extraction_recursive(tmp_path):
             "--attrs",
             str(FIXTURES / "attributes.csv"),
             "--recursive",
-            "--output",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -370,7 +372,7 @@ def test_cli_folder_extraction_non_recursive_ignores_subdirs(tmp_path):
             str(FIXTURES / "nested_docs"),
             "--attrs",
             str(FIXTURES / "attributes.csv"),
-            "--output",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -400,7 +402,7 @@ def test_cli_file_extraction_from_pdf(tmp_path):
             str(pdf_path),
             "--attrs",
             str(FIXTURES / "paper_attributes.csv"),
-            "--output",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -433,7 +435,7 @@ def test_cli_folder_extraction_with_pdf_files(tmp_path):
             str(FIXTURES / "attributes.csv"),
             "--filetype",
             "pdf",
-            "--output",
+            "--output-dir",
             str(tmp_path),
         ],
     )

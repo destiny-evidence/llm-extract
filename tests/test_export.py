@@ -56,16 +56,6 @@ class _Intervention:
     intervention_type: typing.Optional[_InterventionType] = Field(default=None)
 
 
-def test_format_value_nested_dataclass_json_serialised() -> None:
-    value = _Intervention(
-        group_name="Risperidone", intervention_type=_InterventionType("Intervention")
-    )
-    assert _format_value(value) == (
-        '{"group_name": "Risperidone", '
-        '"intervention_type": {"type_of_intervention": "Intervention"}}'
-    )
-
-
 def test_format_value_list_of_nested_dataclasses_json_serialised() -> None:
     value = [
         _Intervention(group_name="Risperidone", intervention_type=None),
@@ -129,18 +119,6 @@ def test_write_csv_content(tmp_path) -> None:
     assert "Widget" in content
     assert "price" in content
     assert "14.99" in content
-
-
-def test_display_prints_aligned_columns(capsys) -> None:
-    result = ExtractionResult(
-        prediction=dspy.Prediction(product_name="Widget", price=14.99)
-    )
-    result.display()
-    output = capsys.readouterr().out
-    assert "product_name" in output
-    assert "Widget" in output
-    assert "price" in output
-    assert "14.99" in output
 
 
 def test_to_csv_rows_reasoning_excluded_from_regular_rows() -> None:
@@ -409,89 +387,6 @@ def test_write_excel_pooled_sheet_links_multiple_parent_rows(tmp_path) -> None:
     assert intervention_rows[3] == ("outcomes", 2, "Placebo", NOT_FOUND)
 
 
-# --- display with attribute metadata ---
-
-
-def test_display_without_attributes_falls_back_to_csv_rows(capsys) -> None:
-    result = ExtractionResult(
-        prediction=dspy.Prediction(product_name="Widget", price=14.99)
-    )
-    result.display()
-    output = capsys.readouterr().out
-    assert "product_name" in output
-    assert "Widget" in output
-    assert "price" in output
-    assert "14.99" in output
-
-
-def test_display_with_attributes_prints_plain_values(capsys) -> None:
-    result = ExtractionResult(
-        prediction=dspy.Prediction(product_name="Widget", price=14.99),
-        attributes=[
-            Attribute(
-                name="product_name", attr_type=typing.Optional[str], description=""
-            ),
-            Attribute(name="price", attr_type=typing.Optional[float], description=""),
-        ],
-    )
-    result.display()
-    output = capsys.readouterr().out
-    assert "product_name" in output
-    assert "Widget" in output
-    assert "price" in output
-    assert "14.99" in output
-
-
-def test_display_with_custom_type_prints_table(capsys) -> None:
-    result = ExtractionResult(
-        prediction=dspy.Prediction(
-            interventions=[
-                _Intervention(
-                    group_name="Risperidone",
-                    intervention_type=_InterventionType("Intervention"),
-                ),
-                _Intervention(group_name="Haloperidol", intervention_type=None),
-            ]
-        ),
-        attributes=[
-            Attribute(
-                name="interventions",
-                attr_type=typing.Optional[list[_Intervention]],
-                description="",
-            ),
-        ],
-    )
-    result.display()
-    output = capsys.readouterr().out
-
-    assert "interventions" in output
-    assert "see 'interventions' table below" in output
-    assert "group_name" in output
-    assert "intervention_type.type_of_intervention" in output
-    assert "Risperidone" in output
-    assert "Intervention" in output
-    assert "Haloperidol" in output
-    assert NOT_FOUND in output
-
-
-def test_display_with_missing_custom_type_shows_not_found(capsys) -> None:
-    result = ExtractionResult(
-        prediction=dspy.Prediction(interventions=None),
-        attributes=[
-            Attribute(
-                name="interventions",
-                attr_type=typing.Optional[list[_Intervention]],
-                description="",
-            ),
-        ],
-    )
-    result.display()
-    output = capsys.readouterr().out
-
-    lines = output.splitlines()
-    assert any(line.startswith("interventions") and NOT_FOUND in line for line in lines)
-
-
 # --- to_json / write_json ---
 
 
@@ -673,27 +568,6 @@ def test_write_json_content_round_trips_via_json_load(tmp_path) -> None:
             "intervention_type": NOT_FOUND,
         }
     }
-
-
-def test_display_truncates_long_cell_values(capsys) -> None:
-    long_value = "x" * 100
-    result = ExtractionResult(
-        prediction=dspy.Prediction(
-            interventions=[_Intervention(group_name=long_value, intervention_type=None)]
-        ),
-        attributes=[
-            Attribute(
-                name="interventions",
-                attr_type=typing.Optional[list[_Intervention]],
-                description="",
-            ),
-        ],
-    )
-    result.display()
-    output = capsys.readouterr().out
-
-    for line in output.splitlines():
-        assert len(line) < len(long_value)
 
 
 # --- write_extraction_results_to_folder ---

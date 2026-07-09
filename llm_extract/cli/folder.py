@@ -69,11 +69,12 @@ def folder(
         is_flag=True,
         help="Recursively traverse subdirectories and preserve directory structure in output.",
     ),
-    output: Optional[Path] = typer.Option(
+    output_dir: Optional[Path] = typer.Option(
         None,
+        "--output-dir",
         help=(
             "Directory to write results to. Each file is written as <filename>-extracted.csv or .xlsx. "
-            "If omitted, creates <source>-extracted/ in the same parent directory as the source folder."
+            "Defaults to <source>-extracted/ in the current working directory."
         ),
         file_okay=False,
         dir_okay=True,
@@ -94,7 +95,7 @@ def folder(
     has_pdf = "pdf" in filetypes
     configure_dspy(env_file=env_file, multimodal=has_pdf)
     attributes = _load_attributes(attrs, root_type)
-    _validate_output_is_directory(output)
+    _validate_output_is_directory(output_dir)
 
     results = extract_folder(
         source,
@@ -112,16 +113,16 @@ def folder(
         )
         return
 
-    output_dir = output or (source.parent / f"{source.name}-extracted")
+    resolved_output_dir = output_dir or (Path.cwd() / f"{source.name}-extracted")
     use_excel = attrs.suffix.lower() in EXCEL_SUFFIXES
     write_extraction_results_to_folder(
-        output_dir,
+        resolved_output_dir,
         results,
         use_excel=use_excel,
         also_json=json_output,
         on_progress=_make_export_progress_callback(),
     )
-    typer.echo(f"Extracted {len(results)} files to {output_dir}")
+    typer.echo(f"Extracted {len(results)} files to {resolved_output_dir}")
 
 
 def _make_folder_progress_callback() -> Callable[[str, int, int], None]:
@@ -187,15 +188,15 @@ def _validate_filetypes(filetypes: list[str]) -> list[str]:
     return filetypes
 
 
-def _validate_output_is_directory(output: Optional[Path]) -> None:
+def _validate_output_is_directory(output_dir: Optional[Path]) -> None:
     """
-    Validate that output path is a directory, not a file.
+    Validate that output_dir is a directory, not a file.
 
-    :param output: the output path to validate
-    :raises typer.BadParameter: if output has a file extension
+    :param output_dir: the output path to validate
+    :raises typer.BadParameter: if output_dir has a file extension
     """
-    if output is not None and output.suffix:
+    if output_dir is not None and output_dir.suffix:
         raise typer.BadParameter(
-            "When extracting from a folder, --output must be a directory, not a file.",
-            param_hint="--output",
+            "When extracting from a folder, --output-dir must be a directory, not a file.",
+            param_hint="--output-dir",
         )

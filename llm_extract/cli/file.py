@@ -52,14 +52,14 @@ def file(
         is_flag=True,
         help="Use chain-of-thought reasoning. Produces a _reasoning_ row in the output but adds latency and cost.",
     ),
-    output: Optional[Path] = typer.Option(
+    output_dir: Optional[Path] = typer.Option(
         None,
+        "--output-dir",
         help=(
-            "Where to write results. Pass a .csv or .xlsx file path for an exact "
-            "destination, or a directory to auto-name the file as "
-            "<source>-extracted.csv. If omitted, results are printed to the console."
+            "Directory to write results to, named <source>-extracted.csv or .xlsx "
+            "(chosen from --attrs). Defaults to the current working directory."
         ),
-        file_okay=True,
+        file_okay=False,
         dir_okay=True,
         writable=True,
     ),
@@ -69,8 +69,7 @@ def file(
         is_flag=True,
         help=(
             "Additionally write a <source>-extracted.json file, preserving the "
-            "full nested structure for programmatic use. Named after --output "
-            "(or, if --output is omitted, next to --source)."
+            "full nested structure for programmatic use."
         ),
     ),
 ) -> None:
@@ -78,6 +77,7 @@ def file(
     is_pdf = source.suffix.lower() == ".pdf"
     configure_dspy(env_file=env_file, multimodal=is_pdf)
     attributes = _load_attributes(attrs, root_type)
+    use_excel = attrs.suffix.lower() in EXCEL_SUFFIXES
 
     result = extract(
         source,
@@ -85,21 +85,19 @@ def file(
         with_reasoning=with_reasoning,
         on_progress=_file_progress_callback,
     )
-    if output is None:
-        result.display()
-        json_path = source.parent / f"{source.stem}-extracted.json"
+
+    write_dir = output_dir or Path.cwd()
+    extension = "xlsx" if use_excel else "csv"
+    output_path = write_dir / f"{source.stem}-extracted.{extension}"
+    if use_excel:
+        result.write_excel(output_path)
     else:
-        if output.is_dir():
-            extension = "xlsx" if attrs.suffix.lower() in EXCEL_SUFFIXES else "csv"
-            output = output / f"{source.stem}-extracted.{extension}"
-        if output.suffix.lower() in EXCEL_SUFFIXES:
-            result.write_excel(output)
-        else:
-            result.write_csv(output)
-        json_path = output.with_suffix(".json")
+        result.write_csv(output_path)
 
     if json_output:
-        result.write_json(json_path)
+        result.write_json(output_path.with_suffix(".json"))
+
+    typer.echo(f"Extracted attributes to {output_path}")
 
 
 def _file_progress_callback(
