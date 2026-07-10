@@ -4,9 +4,16 @@ from typing import Optional
 import typer
 
 from llm_extract.api import extract
-from llm_extract.cli.common import app, _load_attributes, EXCEL_SUFFIXES
+from llm_extract.cli.common import (
+    app,
+    _load_attributes,
+    validate_filetype,
+    validate_output_dir,
+    EXCEL_SUFFIXES,
+)
 from llm_extract.config import configure_dspy
-from llm_extract.export import ExtractionResult
+from llm_extract.export import ExtractionResult, write_extraction_result
+from llm_extract.loader import MULTIMODAL_FILETYPES
 from llm_extract.models import ExtractionStage, MixedDocument
 
 
@@ -74,10 +81,13 @@ def file(
     ),
 ) -> None:
     """Extract structured attributes from a single file (text or PDF)."""
-    is_pdf = source.suffix.lower() == ".pdf"
-    configure_dspy(env_file=env_file, multimodal=is_pdf)
+    filetype = source.suffix.lower().lstrip(".")
+    validate_filetype(filetype, param_hint="--source")
+    is_multimodal = filetype in MULTIMODAL_FILETYPES
+    configure_dspy(env_file=env_file, multimodal=is_multimodal)
     attributes = _load_attributes(attrs, root_type)
     use_excel = attrs.suffix.lower() in EXCEL_SUFFIXES
+    validate_output_dir(output_dir)
 
     result = extract(
         source,
@@ -89,13 +99,7 @@ def file(
     write_dir = output_dir or Path.cwd()
     extension = "xlsx" if use_excel else "csv"
     output_path = write_dir / f"{source.stem}-extracted.{extension}"
-    if use_excel:
-        result.write_excel(output_path)
-    else:
-        result.write_csv(output_path)
-
-    if json_output:
-        result.write_json(output_path.with_suffix(".json"))
+    write_extraction_result(result, output_path, use_excel, also_json=json_output)
 
     typer.echo(f"Extracted attributes to {output_path}")
 

@@ -308,6 +308,47 @@ def test_file_nonexistent_output_dir(source_file, attrs_file, tmp_path) -> None:
     assert result.exit_code != 0
 
 
+def test_file_path_as_output_dir_errors(
+    source_file, attrs_file, tmp_path, mock_pipeline
+) -> None:
+    output_file = tmp_path / "results.csv"
+    result = runner.invoke(
+        app,
+        [
+            "file",
+            "--source",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--output-dir",
+            str(output_file),
+        ],
+    )
+
+    assert result.exit_code != 0
+    mock_pipeline["extract"].assert_not_called()
+
+
+def test_file_unsupported_source_filetype_errors(
+    attrs_file, tmp_path, mock_pipeline
+) -> None:
+    unsupported_source = tmp_path / "source.docx"
+    unsupported_source.write_text("Some product description text.")
+    result = runner.invoke(
+        app,
+        [
+            "file",
+            "--source",
+            str(unsupported_source),
+            "--attrs",
+            str(attrs_file),
+        ],
+    )
+
+    assert result.exit_code != 0
+    mock_pipeline["extract"].assert_not_called()
+
+
 def test_file_missing_source_option(attrs_file) -> None:
     result = runner.invoke(app, ["file", "--attrs", str(attrs_file)])
     assert result.exit_code != 0

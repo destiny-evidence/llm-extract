@@ -5,10 +5,16 @@ import typer
 from tqdm import tqdm
 
 from llm_extract.api import extract_folder
-from llm_extract.cli.common import app, _load_attributes, EXCEL_SUFFIXES
+from llm_extract.cli.common import (
+    app,
+    _load_attributes,
+    validate_filetype,
+    validate_output_dir,
+    EXCEL_SUFFIXES,
+)
 from llm_extract.config import configure_dspy
 from llm_extract.export import write_extraction_results_to_folder
-from llm_extract.loader import SUPPORTED_FILETYPES
+from llm_extract.loader import SUPPORTED_FILETYPES, MULTIMODAL_FILETYPES
 
 
 @app.command()
@@ -92,10 +98,10 @@ def folder(
 ) -> None:
     """Extract structured attributes from multiple files in a folder (text or PDF)."""
     filetypes = _validate_filetypes(filetypes)
-    has_pdf = "pdf" in filetypes
-    configure_dspy(env_file=env_file, multimodal=has_pdf)
+    has_multimodal_filetype = bool(MULTIMODAL_FILETYPES & set(filetypes))
+    configure_dspy(env_file=env_file, multimodal=has_multimodal_filetype)
     attributes = _load_attributes(attrs, root_type)
-    _validate_output_is_directory(output_dir)
+    validate_output_dir(output_dir)
 
     results = extract_folder(
         source,
@@ -180,23 +186,5 @@ def _validate_filetypes(filetypes: list[str]) -> list[str]:
     :raises typer.BadParameter: if any filetype is unsupported
     """
     for ft in filetypes:
-        if ft not in SUPPORTED_FILETYPES:
-            raise typer.BadParameter(
-                f"Unsupported file type '{ft}'. Supported: {', '.join(sorted(SUPPORTED_FILETYPES))}",
-                param_hint="--filetype",
-            )
+        validate_filetype(ft, param_hint="--filetype")
     return filetypes
-
-
-def _validate_output_is_directory(output_dir: Optional[Path]) -> None:
-    """
-    Validate that output_dir is a directory, not a file.
-
-    :param output_dir: the output path to validate
-    :raises typer.BadParameter: if output_dir has a file extension
-    """
-    if output_dir is not None and output_dir.suffix:
-        raise typer.BadParameter(
-            "When extracting from a folder, --output-dir must be a directory, not a file.",
-            param_hint="--output-dir",
-        )

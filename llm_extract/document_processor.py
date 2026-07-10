@@ -11,7 +11,7 @@ import pdfplumber
 from llm_extract.models import MixedDocument
 
 
-def is_high_quality_text(
+def _is_high_quality_text(
     text: str, min_coverage: float = 0.15, max_whitespace: float = 0.8
 ) -> bool:
     """
@@ -73,7 +73,7 @@ def is_high_quality_text(
     return True
 
 
-def render_page_to_image(page: pdfplumber.PDF, temp_dir: str, dpi: int = 150) -> str:
+def _render_page_to_image(page: pdfplumber.PDF, temp_dir: str, dpi: int = 150) -> str:
     """
     Render a pdfplumber page to PNG and return base64 data URL.
 
@@ -113,11 +113,11 @@ def pdf_to_mixed_document(pdf_path: str | Path) -> MixedDocument:
             for page in pdf.pages:
                 text = page.extract_text()
 
-                if is_high_quality_text(text):
+                if _is_high_quality_text(text):
                     pages.append(text)
                     text_page_count += 1
                 else:
-                    image_url = render_page_to_image(page, temp_dir)
+                    image_url = _render_page_to_image(page, temp_dir)
                     pages.append(dspy.Image(url=image_url))
                     image_page_count += 1
 

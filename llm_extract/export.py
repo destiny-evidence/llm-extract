@@ -435,6 +435,32 @@ class ExtractionResult:
         workbook.save(path)
 
 
+def write_extraction_result(
+    result: ExtractionResult,
+    output_path: Path,
+    use_excel: bool,
+    also_json: bool = False,
+) -> None:
+    """
+    Write a single extraction result to disk, choosing the format and optionally
+    writing a JSON sidecar alongside it.
+
+    :param result: the extraction result to write
+    :param output_path: destination path for the csv/xlsx file
+    :param use_excel: whether to write an Excel file (True) or CSV file (False)
+    :param also_json: whether to additionally write a JSON file alongside it,
+                       named after `output_path` with a .json extension
+    :return: None
+    """
+    if use_excel:
+        result.write_excel(output_path)
+    else:
+        result.write_csv(output_path)
+
+    if also_json:
+        result.write_json(output_path.with_suffix(".json"))
+
+
 def write_extraction_results_to_folder(
     output_dir: Path,
     results: list[tuple[str, ExtractionResult]],
@@ -457,18 +483,12 @@ def write_extraction_results_to_folder(
     :return: None
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+    extension = "xlsx" if use_excel else "csv"
 
     for i, (filename, result) in enumerate(results):
-        extension = "xlsx" if use_excel else "csv"
         file_path = output_dir / f"{filename}-extracted.{extension}"
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        if use_excel:
-            result.write_excel(file_path)
-        else:
-            result.write_csv(file_path)
-
-        if also_json:
-            result.write_json(output_dir / f"{filename}-extracted.json")
+        write_extraction_result(result, file_path, use_excel, also_json=also_json)
 
         if on_progress:
             on_progress(i + 1, len(results))
