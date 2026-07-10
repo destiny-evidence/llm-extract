@@ -5,10 +5,16 @@ import typer
 from tqdm import tqdm
 
 from llm_extract.api import extract_folder
-from llm_extract.cli.common import app, _load_attributes, EXCEL_SUFFIXES
+from llm_extract.cli.common import (
+    app,
+    _load_attributes,
+    validate_filetype,
+    validate_output_dir,
+    EXCEL_SUFFIXES,
+)
 from llm_extract.config import configure_dspy
 from llm_extract.export import write_extraction_results_to_folder
-from llm_extract.loader import SUPPORTED_FILETYPES
+from llm_extract.loader import SUPPORTED_FILETYPES, MULTIMODAL_FILETYPES
 
 
 @app.command()
@@ -69,23 +75,33 @@ def folder(
         is_flag=True,
         help="Recursively traverse subdirectories and preserve directory structure in output.",
     ),
-    output: Optional[Path] = typer.Option(
+    output_dir: Optional[Path] = typer.Option(
         None,
+        "--output-dir",
         help=(
             "Directory to write results to. Each file is written as <filename>-extracted.csv or .xlsx. "
-            "If omitted, creates <source>-extracted/ in the same parent directory as the source folder."
+            "Defaults to <source>-extracted/ in the current working directory."
         ),
         file_okay=False,
         dir_okay=True,
         writable=True,
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        is_flag=True,
+        help=(
+            "Additionally write a <filename>-extracted.json file per result, "
+            "preserving the full nested structure for programmatic use."
+        ),
+    ),
 ) -> None:
     """Extract structured attributes from multiple files in a folder (text or PDF)."""
     filetypes = _validate_filetypes(filetypes)
-    has_pdf = "pdf" in filetypes
-    configure_dspy(env_file=env_file, multimodal=has_pdf)
+    has_multimodal_filetype = bool(MULTIMODAL_FILETYPES & set(filetypes))
+    configure_dspy(env_file=env_file, multimodal=has_multimodal_filetype)
     attributes = _load_attributes(attrs, root_type)
-    _validate_output_is_directory(output)
+    validate_output_dir(output_dir)
 
     results = extract_folder(
         source,
@@ -103,15 +119,16 @@ def folder(
         )
         return
 
-    output_dir = output or (source.parent / f"{source.name}-extracted")
+    resolved_output_dir = output_dir or (Path.cwd() / f"{source.name}-extracted")
     use_excel = attrs.suffix.lower() in EXCEL_SUFFIXES
     write_extraction_results_to_folder(
-        output_dir,
+        resolved_output_dir,
         results,
         use_excel=use_excel,
+        also_json=json_output,
         on_progress=_make_export_progress_callback(),
     )
-    typer.echo(f"Extracted {len(results)} files to {output_dir}")
+    typer.echo(f"Extracted {len(results)} files to {resolved_output_dir}")
 
 
 def _make_folder_progress_callback() -> Callable[[str, int, int], None]:
@@ -169,23 +186,5 @@ def _validate_filetypes(filetypes: list[str]) -> list[str]:
     :raises typer.BadParameter: if any filetype is unsupported
     """
     for ft in filetypes:
-        if ft not in SUPPORTED_FILETYPES:
-            raise typer.BadParameter(
-                f"Unsupported file type '{ft}'. Supported: {', '.join(sorted(SUPPORTED_FILETYPES))}",
-                param_hint="--filetype",
-            )
+        validate_filetype(ft, param_hint="--filetype")
     return filetypes
-
-
-def _validate_output_is_directory(output: Optional[Path]) -> None:
-    """
-    Validate that output path is a directory, not a file.
-
-    :param output: the output path to validate
-    :raises typer.BadParameter: if output has a file extension
-    """
-    if output is not None and output.suffix:
-        raise typer.BadParameter(
-            "When extracting from a folder, --output must be a directory, not a file.",
-            param_hint="--output",
-        )

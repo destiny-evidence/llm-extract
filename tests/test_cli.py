@@ -169,7 +169,7 @@ def test_file_with_reasoning(source_file, attrs_file, mock_pipeline) -> None:
     assert "on_progress" in mock_extract_call[1]
 
 
-def test_file_calls_display_when_no_output(
+def test_file_defaults_output_dir_to_cwd(
     source_file, attrs_file, mock_pipeline
 ) -> None:
     result = runner.invoke(
@@ -177,33 +177,11 @@ def test_file_calls_display_when_no_output(
     )
 
     assert result.exit_code == 0
-    mock_pipeline["result"].display.assert_called_once()
-    mock_pipeline["result"].write_csv.assert_not_called()
+    expected = Path.cwd() / "source-extracted.csv"
+    mock_pipeline["result"].write_csv.assert_called_once_with(expected)
 
 
-def test_file_calls_write_csv_when_output_given(
-    source_file, attrs_file, tmp_path, mock_pipeline
-) -> None:
-    output = tmp_path / "results.csv"
-    result = runner.invoke(
-        app,
-        [
-            "file",
-            "--source",
-            str(source_file),
-            "--attrs",
-            str(attrs_file),
-            "--output",
-            str(output),
-        ],
-    )
-
-    assert result.exit_code == 0
-    mock_pipeline["result"].write_csv.assert_called_once_with(output)
-    mock_pipeline["result"].display.assert_not_called()
-
-
-def test_file_auto_names_file_when_output_is_directory(
+def test_file_writes_csv_to_output_dir(
     source_file, attrs_file, tmp_path, mock_pipeline
 ) -> None:
     result = runner.invoke(
@@ -214,7 +192,7 @@ def test_file_auto_names_file_when_output_is_directory(
             str(source_file),
             "--attrs",
             str(attrs_file),
-            "--output",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -224,29 +202,7 @@ def test_file_auto_names_file_when_output_is_directory(
     mock_pipeline["result"].write_csv.assert_called_once_with(expected)
 
 
-def test_file_calls_write_excel_when_output_is_xlsx(
-    source_file, attrs_file, tmp_path, mock_pipeline
-) -> None:
-    output = tmp_path / "results.xlsx"
-    result = runner.invoke(
-        app,
-        [
-            "file",
-            "--source",
-            str(source_file),
-            "--attrs",
-            str(attrs_file),
-            "--output",
-            str(output),
-        ],
-    )
-
-    assert result.exit_code == 0
-    mock_pipeline["result"].write_excel.assert_called_once_with(output)
-    mock_pipeline["result"].write_csv.assert_not_called()
-
-
-def test_file_auto_names_xlsx_when_output_is_directory_and_attrs_is_excel(
+def test_file_writes_excel_to_output_dir_when_attrs_is_excel(
     source_file, excel_attrs_file, tmp_path, mock_excel_pipeline
 ) -> None:
     result = runner.invoke(
@@ -259,7 +215,7 @@ def test_file_auto_names_xlsx_when_output_is_directory_and_attrs_is_excel(
             str(excel_attrs_file),
             "--type",
             "Study",
-            "--output",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -267,6 +223,73 @@ def test_file_auto_names_xlsx_when_output_is_directory_and_attrs_is_excel(
     assert result.exit_code == 0
     expected = tmp_path / "source-extracted.xlsx"
     mock_excel_pipeline["result"].write_excel.assert_called_once_with(expected)
+    mock_excel_pipeline["result"].write_csv.assert_not_called()
+
+
+def test_file_without_json_flag_does_not_write_json(
+    source_file, attrs_file, tmp_path, mock_pipeline
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "file",
+            "--source",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_pipeline["result"].write_json.assert_not_called()
+
+
+def test_file_json_flag_writes_json_alongside_output(
+    source_file, attrs_file, tmp_path, mock_pipeline
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "file",
+            "--source",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--output-dir",
+            str(tmp_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_pipeline["result"].write_csv.assert_called_once_with(
+        tmp_path / "source-extracted.csv"
+    )
+    mock_pipeline["result"].write_json.assert_called_once_with(
+        tmp_path / "source-extracted.json"
+    )
+
+
+def test_file_json_flag_defaults_to_cwd_when_no_output_dir(
+    source_file, attrs_file, mock_pipeline
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "file",
+            "--source",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    expected = Path.cwd() / "source-extracted.json"
+    mock_pipeline["result"].write_json.assert_called_once_with(expected)
 
 
 def test_file_nonexistent_output_dir(source_file, attrs_file, tmp_path) -> None:
@@ -278,11 +301,52 @@ def test_file_nonexistent_output_dir(source_file, attrs_file, tmp_path) -> None:
             str(source_file),
             "--attrs",
             str(attrs_file),
-            "--output",
-            str(tmp_path / "nonexistent" / "results.csv"),
+            "--output-dir",
+            str(tmp_path / "nonexistent" / "nested"),
         ],
     )
     assert result.exit_code != 0
+
+
+def test_file_path_as_output_dir_errors(
+    source_file, attrs_file, tmp_path, mock_pipeline
+) -> None:
+    output_file = tmp_path / "results.csv"
+    result = runner.invoke(
+        app,
+        [
+            "file",
+            "--source",
+            str(source_file),
+            "--attrs",
+            str(attrs_file),
+            "--output-dir",
+            str(output_file),
+        ],
+    )
+
+    assert result.exit_code != 0
+    mock_pipeline["extract"].assert_not_called()
+
+
+def test_file_unsupported_source_filetype_errors(
+    attrs_file, tmp_path, mock_pipeline
+) -> None:
+    unsupported_source = tmp_path / "source.docx"
+    unsupported_source.write_text("Some product description text.")
+    result = runner.invoke(
+        app,
+        [
+            "file",
+            "--source",
+            str(unsupported_source),
+            "--attrs",
+            str(attrs_file),
+        ],
+    )
+
+    assert result.exit_code != 0
+    mock_pipeline["extract"].assert_not_called()
 
 
 def test_file_missing_source_option(attrs_file) -> None:
@@ -486,7 +550,7 @@ def test_folder_with_custom_output_dir(
             str(source_folder),
             "--attrs",
             str(attrs_file),
-            "--output",
+            "--output-dir",
             str(output),
         ],
     )
@@ -496,7 +560,7 @@ def test_folder_with_custom_output_dir(
     assert call_args[0] == output
 
 
-def test_folder_defaults_to_extracted_folder(
+def test_folder_defaults_to_extracted_folder_in_cwd(
     source_folder, attrs_file, mock_folder_pipeline
 ) -> None:
     result = runner.invoke(
@@ -512,7 +576,7 @@ def test_folder_defaults_to_extracted_folder(
 
     assert result.exit_code == 0
     call_args = mock_folder_pipeline["write"].call_args[0]
-    expected_output = source_folder.parent / f"{source_folder.name}-extracted"
+    expected_output = Path.cwd() / f"{source_folder.name}-extracted"
     assert call_args[0] == expected_output
 
 
@@ -537,6 +601,38 @@ def test_folder_with_excel_attrs(
     # Check that use_excel=True was passed
     call_kwargs = mock_folder_pipeline["write"].call_args[1]
     assert call_kwargs["use_excel"] is True
+
+
+def test_folder_without_json_flag_passes_also_json_false(
+    source_folder, attrs_file, mock_folder_pipeline
+) -> None:
+    result = runner.invoke(
+        app, ["folder", "--source", str(source_folder), "--attrs", str(attrs_file)]
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_folder_pipeline["write"].call_args[1]
+    assert call_kwargs["also_json"] is False
+
+
+def test_folder_json_flag_passes_also_json_true(
+    source_folder, attrs_file, mock_folder_pipeline
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "folder",
+            "--source",
+            str(source_folder),
+            "--attrs",
+            str(attrs_file),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_folder_pipeline["write"].call_args[1]
+    assert call_kwargs["also_json"] is True
 
 
 def test_folder_no_files_found_for_any_filetype(
@@ -664,7 +760,7 @@ def test_folder_file_path_as_output_errors(source_folder, attrs_file, tmp_path) 
                 str(source_folder),
                 "--attrs",
                 str(attrs_file),
-                "--output",
+                "--output-dir",
                 str(output_file),
             ],
         )

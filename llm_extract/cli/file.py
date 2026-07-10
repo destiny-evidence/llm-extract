@@ -4,9 +4,16 @@ from typing import Optional
 import typer
 
 from llm_extract.api import extract
-from llm_extract.cli.common import app, _load_attributes, EXCEL_SUFFIXES
+from llm_extract.cli.common import (
+    app,
+    _load_attributes,
+    validate_filetype,
+    validate_output_dir,
+    EXCEL_SUFFIXES,
+)
 from llm_extract.config import configure_dspy
-from llm_extract.export import ExtractionResult
+from llm_extract.export import ExtractionResult, write_extraction_result
+from llm_extract.loader import MULTIMODAL_FILETYPES
 from llm_extract.models import ExtractionStage, MixedDocument
 
 
@@ -52,22 +59,35 @@ def file(
         is_flag=True,
         help="Use chain-of-thought reasoning. Produces a _reasoning_ row in the output but adds latency and cost.",
     ),
-    output: Optional[Path] = typer.Option(
+    output_dir: Optional[Path] = typer.Option(
         None,
+        "--output-dir",
         help=(
-            "Where to write results. Pass a .csv or .xlsx file path for an exact "
-            "destination, or a directory to auto-name the file as "
-            "<source>-extracted.csv. If omitted, results are printed to the console."
+            "Directory to write results to, named <source>-extracted.csv or .xlsx "
+            "(chosen from --attrs). Defaults to the current working directory."
         ),
-        file_okay=True,
+        file_okay=False,
         dir_okay=True,
         writable=True,
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        is_flag=True,
+        help=(
+            "Additionally write a <source>-extracted.json file, preserving the "
+            "full nested structure for programmatic use."
+        ),
+    ),
 ) -> None:
     """Extract structured attributes from a single file (text or PDF)."""
-    is_pdf = source.suffix.lower() == ".pdf"
-    configure_dspy(env_file=env_file, multimodal=is_pdf)
+    filetype = source.suffix.lower().lstrip(".")
+    validate_filetype(filetype, param_hint="--source")
+    is_multimodal = filetype in MULTIMODAL_FILETYPES
+    configure_dspy(env_file=env_file, multimodal=is_multimodal)
     attributes = _load_attributes(attrs, root_type)
+    use_excel = attrs.suffix.lower() in EXCEL_SUFFIXES
+    validate_output_dir(output_dir)
 
     result = extract(
         source,
@@ -75,16 +95,13 @@ def file(
         with_reasoning=with_reasoning,
         on_progress=_file_progress_callback,
     )
-    if output is None:
-        result.display()
-    else:
-        if output.is_dir():
-            extension = "xlsx" if attrs.suffix.lower() in EXCEL_SUFFIXES else "csv"
-            output = output / f"{source.stem}-extracted.{extension}"
-        if output.suffix.lower() in EXCEL_SUFFIXES:
-            result.write_excel(output)
-        else:
-            result.write_csv(output)
+
+    write_dir = output_dir or Path.cwd()
+    extension = "xlsx" if use_excel else "csv"
+    output_path = write_dir / f"{source.stem}-extracted.{extension}"
+    write_extraction_result(result, output_path, use_excel, also_json=json_output)
+
+    typer.echo(f"Extracted attributes to {output_path}")
 
 
 def _file_progress_callback(

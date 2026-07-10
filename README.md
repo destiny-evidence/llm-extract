@@ -24,19 +24,13 @@ in_stock,bool,Whether the product is currently available
 ```bash
 llm-extract file --source sample.txt --attrs attributes.csv
 ```
+Writes `sample-extracted.csv` to the current directory.
 
 **Extract from a folder of files (concurrently):**
 ```bash
 llm-extract folder --source ./documents --attrs attributes.csv
 ```
-
-**Example output:**
-```
-name          value
-product_name  Aeron Chair by Herman Miller
-price         1495.0
-in_stock      True
-```
+Writes one file per result to `./documents-extracted/`.
 
 ---
 
@@ -143,7 +137,8 @@ This traverses all subdirectories and recreates the folder structure in the outp
 | `--type` | Depends | Name of the top-level sheet to extract. Required when `--attrs` is an Excel workbook. |
 | `--env` | No | Path to a `.env` file (overrides all other credential sources) |
 | `--with-reasoning` | No | Enable chain-of-thought reasoning. Adds a `_reasoning_` row to the output explaining the extraction. Off by default. |
-| `--output` | No | **File mode:** Where to write results. Pass a `.csv` or `.xlsx` file path, or a directory to auto-name the file. If omitted, results print to console. **Folder mode:** Directory to write results to. Each file becomes `<filename>-extracted.csv` or `.xlsx`. Defaults to `<source>-extracted/` in the same parent directory. |
+| `--output-dir` | No | Directory to write results to. **File mode:** writes `<source>-extracted.csv` or `.xlsx` (chosen from `--attrs`) there; defaults to the current working directory. **Folder mode:** writes one `<filename>-extracted.csv`/`.xlsx` per result there; defaults to `<source>-extracted/` in the current working directory. |
+| `--json` | No | Additionally write a `<name>-extracted.json` file alongside the csv/xlsx output, preserving the full nested structure for programmatic use. See [JSON](#json---json). |
 
 ### Folder-only options
 
@@ -168,33 +163,7 @@ This traverses all subdirectories and recreates the folder structure in the outp
   
 ### Output format
 
-#### Console
-
-Without `--output`, results are printed as an aligned table:
-
-```
-name          value
-product_name  Aeron Chair by Herman Miller
-price         1495.0
-in_stock      True
-```
-
-If `--attrs` is an Excel template (see [Custom types](#custom-types-excel-templates)), plain attributes are shown the same way, but any attribute with a custom type is shown as its own titled table underneath, with one row per item:
-
-```
-name           value
-interventions  see 'interventions' table below
-
-interventions
-group_name   intervention_type.type_of_intervention
------------  ---------------------------------------
-Risperidone  Intervention
-Haloperidol  NOT_FOUND
-```
-
-Tables wider than your terminal are printed as one `column: value` block per item instead of a grid.
-
-#### CSV (`--output results.csv`)
+#### CSV (default output when `--attrs` is a CSV)
 
 Results are written to a CSV with `name` and `value` columns:
 
@@ -205,21 +174,36 @@ price,1495.0
 in_stock,True
 ```
 
-Custom-type attributes are JSON-encoded in their cell.
+`list[type]` values are JSON-encoded in their cell.
 
-#### Excel (`--output results.xlsx`)
+#### Excel (default output when `--attrs` is an Excel workbook)
 
 Results are written to a multi-sheet workbook:
 
 - A **"Summary"** sheet has one row per top-level attribute. Plain attributes show their value directly.
-- Attributes with a custom type (or a non-empty list of one) get a hyperlink in the Summary sheet to a dedicated sheet, with one row per item and one column per field.
-- Fields that are themselves a custom type one level deep are flattened into dot-prefixed columns (e.g. `intervention_type.type_of_intervention`). Any deeper nesting falls back to a JSON-encoded cell.
+- Attributes with a custom type (or a non-empty list of one) get a hyperlink in the Summary sheet to a dedicated sheet named after the attribute, with one row per item and one column per field.
+- Fields that are themselves a custom type are flattened into dot-prefixed columns (e.g. `intervention_type.type_of_intervention`), at any nesting depth.
+- Fields that are a **list** of a custom type — at any nesting depth, not just top-level attributes — get a hyperlink to their own sheet named after that type, instead of a JSON-encoded cell. All instances of that type found anywhere in the results are pooled into the same sheet, each row tagged with `_parent_sheet`/`_parent_row` columns identifying which specific row it belongs to (since a type can be reached from more than one place).
 - Custom-type attributes with no value show `NOT_FOUND` in the Summary sheet, with no dedicated sheet created.
+
+#### JSON (`--json`)
+
+Pass `--json` to additionally write a `<name>-extracted.json` file alongside the csv/xlsx output, preserving the full nested structure exactly as extracted — no flattening, no JSON-encoded cells. This is the format to reach for when you want to consume results in another program or script, rather than open them in Excel:
+
+```json
+{
+  "product_name": "Aeron Chair by Herman Miller",
+  "price": 1495.0,
+  "in_stock": true
+}
+```
+
+Missing values are `NOT_FOUND`, matching CSV/Excel, applied at any nesting depth (e.g. a field inside a custom type, not just top-level attributes), and `_reasoning_` is included as a top-level key when `--with-reasoning` was used. Custom types and lists of custom types appear as ordinary nested JSON objects/arrays.
 
 Two special values may appear in any output format:
 
 - **`NOT_FOUND`** — the attribute was not present in the source text.
-- **`_reasoning_`** — a row containing the LLM's chain-of-thought explanation for the extraction (last row in CSV/Summary). Only present when `--with-reasoning` was used.
+- **`_reasoning_`** — a row containing the LLM's chain-of-thought explanation for the extraction (last row in CSV/Summary, or a top-level key in JSON). Only present when `--with-reasoning` was used.
 
 ### Defining attributes
 
@@ -348,24 +332,20 @@ Supported formats:
 
 ### Examples
 
-**Single file — print to console:**
+**Single file — write to current directory (default):**
 ```bash
 llm-extract file --source paper.txt --attrs fields.csv
 ```
+Writes `paper-extracted.csv` to the current directory.
 
-**Single file — save to CSV:**
+**Single file — write to a specific directory:**
 ```bash
-llm-extract file --source paper.txt --attrs fields.csv --output results.csv
-```
-
-**Single file — save to directory (auto-named):**
-```bash
-llm-extract file --source paper.txt --attrs fields.csv --output /path/to/dir/
+llm-extract file --source paper.txt --attrs fields.csv --output-dir /path/to/dir/
 ```
 
 **Single file — with Excel template and custom types:**
 ```bash
-llm-extract file --source paper.txt --attrs template.xlsx --type Study --output results.xlsx
+llm-extract file --source paper.txt --attrs template.xlsx --type Study --output-dir /path/to/dir/
 ```
 
 **Folder — extract all .txt files concurrently:**
@@ -381,7 +361,7 @@ llm-extract folder --source ./documents --attrs fields.csv --filetype txt --file
 
 **Folder — custom concurrency and output:**
 ```bash
-llm-extract folder --source ./documents --attrs fields.csv --max-concurrent 4 --output ./results/
+llm-extract folder --source ./documents --attrs fields.csv --max-concurrent 4 --output-dir ./results/
 ```
 
 **Folder — recursive extraction from project:**
@@ -410,7 +390,7 @@ llm-extract folder --source ./docs --attrs fields.csv --env /path/to/.env
 
 **`NOT_FOUND` in results** — the LLM could not locate that attribute in the source text. Consider making the description in your attributes CSV more specific.
 
-**`Invalid value for '--output'`** — the directory you passed does not exist. Create it first, or pass a full file path instead.
+**`Invalid value for '--output-dir'`** — the directory doesn't exist or isn't writable. Create it first, or pass a different directory.
 
 **`--type is required when --attrs is an Excel workbook`** — pass `--type <SheetName>` to choose the top-level sheet to extract.
 
