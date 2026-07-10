@@ -9,40 +9,40 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 from llm_extract.export import (
     ExtractionResult,
     NOT_FOUND,
-    _format_value,
+    format_value,
     write_extraction_results_to_folder,
 )
 from llm_extract.models import Attribute
 
 
 def test_format_value_none_returns_not_found() -> None:
-    assert _format_value(None) == NOT_FOUND
+    assert format_value(None) == NOT_FOUND
 
 
 def test_format_value_string_strips_double_quotes() -> None:
-    assert _format_value('"Aeron Chair"') == "Aeron Chair"
+    assert format_value('"Aeron Chair"') == "Aeron Chair"
 
 
 def test_format_value_string_strips_single_quotes() -> None:
-    assert _format_value("'Aeron Chair'") == "Aeron Chair"
+    assert format_value("'Aeron Chair'") == "Aeron Chair"
 
 
 def test_format_value_plain_string_unchanged() -> None:
-    assert _format_value("Aeron Chair") == "Aeron Chair"
+    assert format_value("Aeron Chair") == "Aeron Chair"
 
 
 def test_format_value_list_json_serialised() -> None:
-    assert _format_value([1, 2, 3]) == "[1, 2, 3]"
+    assert format_value([1, 2, 3]) == "[1, 2, 3]"
 
 
 def test_format_value_dict_json_serialised() -> None:
-    assert _format_value({"width": 68.5}) == '{"width": 68.5}'
+    assert format_value({"width": 68.5}) == '{"width": 68.5}'
 
 
 def test_format_value_primitives_unchanged() -> None:
-    assert _format_value(42) == 42
-    assert _format_value(14.99) == 14.99
-    assert _format_value(True) is True
+    assert format_value(42) == 42
+    assert format_value(14.99) == 14.99
+    assert format_value(True) is True
 
 
 @pydantic_dataclass
@@ -61,7 +61,7 @@ def test_format_value_list_of_nested_dataclasses_json_serialised() -> None:
         _Intervention(group_name="Risperidone", intervention_type=None),
         _Intervention(group_name="Haloperidol", intervention_type=None),
     ]
-    assert _format_value(value) == (
+    assert format_value(value) == (
         '[{"group_name": "Risperidone", "intervention_type": null}, '
         '{"group_name": "Haloperidol", "intervention_type": null}]'
     )
