@@ -137,7 +137,7 @@ This traverses all subdirectories and recreates the folder structure in the outp
 | `--type` | Depends | Name of the top-level sheet to extract. Required when `--attrs` is an Excel workbook. |
 | `--env` | No | Path to a `.env` file (overrides all other credential sources) |
 | `--with-reasoning` | No | Enable chain-of-thought reasoning. Adds a `_reasoning_` row to the output explaining the extraction. Off by default. |
-| `--output-dir` | No | Directory to write results to. **File mode:** writes `<source>-extracted.csv` or `.xlsx` (chosen from `--attrs`) there; defaults to the current working directory. **Folder mode:** writes one `<filename>-extracted.csv`/`.xlsx` per result there; defaults to `<source>-extracted/` in the current working directory. |
+| `--output-dir` | No | Directory to write results into. **File mode:** writes `<source>-extracted.csv` or `.xlsx` (chosen from `--attrs`) there; defaults to the current working directory. **Folder mode:** creates a `<source>-extracted/` subfolder inside it, with one `<filename>-extracted.csv`/`.xlsx` per result; defaults to the current working directory. |
 | `--json` | No | Additionally write a `<name>-extracted.json` file alongside the csv/xlsx output, preserving the full nested structure for programmatic use. See [JSON](#json---json). |
 
 ### Folder-only options
@@ -363,6 +363,7 @@ llm-extract folder --source ./documents --attrs fields.csv --filetype txt --file
 ```bash
 llm-extract folder --source ./documents --attrs fields.csv --max-concurrent 4 --output-dir ./results/
 ```
+Writes one file per result to `./results/documents-extracted/`.
 
 **Folder — recursive extraction from project:**
 ```bash

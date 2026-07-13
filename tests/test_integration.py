@@ -173,13 +173,14 @@ def test_cli_folder_extraction_txt_files(tmp_path):
     )
 
     assert result.exit_code == 0
+    output_dir = tmp_path / "documents-extracted"
     # Should have created extracted CSV files for each txt file
-    extracted_files = list(tmp_path.glob("*.csv"))
+    extracted_files = list(output_dir.glob("*.csv"))
     assert len(extracted_files) == 3
     # Check that all expected files were created
-    assert (tmp_path / "product1-extracted.csv").exists()
-    assert (tmp_path / "product2-extracted.csv").exists()
-    assert (tmp_path / "product3-extracted.csv").exists()
+    assert (output_dir / "product1-extracted.csv").exists()
+    assert (output_dir / "product2-extracted.csv").exists()
+    assert (output_dir / "product3-extracted.csv").exists()
 
 
 def test_cli_folder_extraction_md_files(tmp_path):
@@ -200,10 +201,11 @@ def test_cli_folder_extraction_md_files(tmp_path):
     )
 
     assert result.exit_code == 0
-    extracted_files = list(tmp_path.glob("*.csv"))
+    output_dir = tmp_path / "documents-extracted"
+    extracted_files = list(output_dir.glob("*.csv"))
     assert len(extracted_files) == 2
-    assert (tmp_path / "article1-extracted.csv").exists()
-    assert (tmp_path / "article2-extracted.csv").exists()
+    assert (output_dir / "article1-extracted.csv").exists()
+    assert (output_dir / "article2-extracted.csv").exists()
 
 
 def test_cli_folder_extraction_multiple_filetypes(tmp_path):
@@ -226,7 +228,7 @@ def test_cli_folder_extraction_multiple_filetypes(tmp_path):
     )
 
     assert result.exit_code == 0
-    extracted_files = list(tmp_path.glob("*.csv"))
+    extracted_files = list((tmp_path / "documents-extracted").glob("*.csv"))
     # Should have 3 txt + 2 md = 5 total
     assert len(extracted_files) == 5
 
@@ -279,7 +281,7 @@ def test_cli_folder_extraction_with_max_concurrent(tmp_path):
     )
 
     assert result.exit_code == 0
-    extracted_files = list(tmp_path.glob("*.csv"))
+    extracted_files = list((tmp_path / "documents-extracted").glob("*.csv"))
     assert len(extracted_files) == 3
 
 
@@ -302,7 +304,7 @@ def test_cli_folder_extraction_with_reasoning(tmp_path):
     )
 
     assert result.exit_code == 0
-    extracted_files = list(tmp_path.glob("*.csv"))
+    extracted_files = list((tmp_path / "documents-extracted").glob("*.csv"))
     assert len(extracted_files) == 3
     # Check that at least one file contains reasoning
     has_reasoning = False
@@ -352,14 +354,15 @@ def test_cli_folder_extraction_recursive(tmp_path):
     )
 
     assert result.exit_code == 0
+    output_dir = tmp_path / "nested_docs-extracted"
     # Should extract files from nested structure
-    extracted_files = list(tmp_path.glob("**/*.csv"))
+    extracted_files = list(output_dir.glob("**/*.csv"))
     # Should find: project1/doc1, project1/doc2, project2/subdir/doc3
     assert len(extracted_files) == 3
     # Verify directory structure is preserved
-    assert (tmp_path / "project1" / "doc1-extracted.csv").exists()
-    assert (tmp_path / "project1" / "doc2-extracted.csv").exists()
-    assert (tmp_path / "project2" / "subdir" / "doc3-extracted.csv").exists()
+    assert (output_dir / "project1" / "doc1-extracted.csv").exists()
+    assert (output_dir / "project1" / "doc2-extracted.csv").exists()
+    assert (output_dir / "project2" / "subdir" / "doc3-extracted.csv").exists()
 
 
 def test_cli_folder_extraction_non_recursive_ignores_subdirs(tmp_path):
