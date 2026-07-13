@@ -557,7 +557,7 @@ def test_folder_with_custom_output_dir(
 
     assert result.exit_code == 0
     call_args = mock_folder_pipeline["write"].call_args[0]
-    assert call_args[0] == output
+    assert call_args[0] == output / f"{source_folder.name}-extracted"
 
 
 def test_folder_defaults_to_extracted_folder_in_cwd(

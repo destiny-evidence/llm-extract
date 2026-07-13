@@ -79,8 +79,9 @@ def folder(
         None,
         "--output-dir",
         help=(
-            "Directory to write results to. Each file is written as <filename>-extracted.csv or .xlsx. "
-            "Defaults to <source>-extracted/ in the current working directory."
+            "Directory to write results into. A <source>-extracted/ subfolder is created "
+            "inside it, with each file written as <filename>-extracted.csv or .xlsx. "
+            "Defaults to the current working directory."
         ),
         file_okay=False,
         dir_okay=True,
@@ -119,7 +120,7 @@ def folder(
         )
         return
 
-    resolved_output_dir = output_dir or (Path.cwd() / f"{source.name}-extracted")
+    resolved_output_dir = (output_dir or Path.cwd()) / f"{source.name}-extracted"
     use_excel = attrs.suffix.lower() in EXCEL_SUFFIXES
     write_extraction_results_to_folder(
         resolved_output_dir,
