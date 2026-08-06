@@ -844,6 +844,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "botocore" },
+    { name = "charset-normalizer" },
     { name = "dotenv" },
     { name = "dspy" },
     { name = "openpyxl" },
@@ -862,6 +863,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "botocore", specifier = ">=1.43.18" },
+    { name = "charset-normalizer", specifier = ">=3.4.7" },
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "dspy", specifier = ">=3.2.1" },
     { name = "openpyxl", specifier = ">=3.1.5" },

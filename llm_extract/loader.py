@@ -3,10 +3,11 @@ from pathlib import Path
 from typing import Union
 
 import openpyxl
+from charset_normalizer import from_path
 
 from llm_extract.document_processor import pdf_to_mixed_document
 from llm_extract.models import CSVData, WorkbookData, MixedDocument
-from llm_extract.exceptions import LoadingAttributeFromCSVError
+from llm_extract.exceptions import LoadingAttributeFromCSVError, SourceLoadingError
 
 
 TEXT_FILETYPES = {"txt", "md", "html"}
@@ -72,8 +73,29 @@ def load_workbook(path: Path | str) -> WorkbookData:
 
 
 def load_source(path: Path) -> Union[str, MixedDocument]:
-    """Load source content from file, handling PDFs and text files."""
+    """
+    Load source content from file, handling PDFs and text files.
+
+    Text files are decoded using a detected encoding rather than the
+    platform default, since files are commonly authored on a different
+    OS/locale than the one running the extraction. If no encoding can be
+    confidently detected, falls back to latin-1, which accepts any byte
+    sequence.
+
+    :param path: path to the source file
+    :return: decoded text, or a MixedDocument for PDFs
+    :raises SourceLoadingError: if the file cannot be read from disk
+    """
     if path.suffix.lower() == ".pdf":
         return pdf_to_mixed_document(path)
-    else:
-        return path.read_text()
+
+    try:
+        match = from_path(path).best()
+        if match is not None:
+            # str(match) reuses the decode charset-normalizer already
+            # performed while scoring candidate encodings, avoiding a
+            # redundant second read+decode of the file.
+            return str(match)
+        return path.read_text(encoding="latin-1")
+    except OSError as exc:
+        raise SourceLoadingError(f"Failed to read '{path}': {exc}")

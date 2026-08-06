@@ -99,7 +99,7 @@ LLM_EXTRACT_MODEL=openai/gpt-4o
 To get the latest version of `llm-extract`, run:
 
 ```bash
-uv tool install --reinstall git+https://github.com/destiny-evidence/llm-extract
+uv tool upgrade llm-extract
 ```
 
 Your credentials and config files are not affected by an update.

@@ -167,6 +167,48 @@ def test_extract_folder_batch_failures(sample_attrs) -> None:
         shutil.rmtree(temp_dir)
 
 
+def test_extract_folder_load_failure_does_not_misalign_results(sample_attrs) -> None:
+    """A file that fails to load should be reported as a failure, without
+    aborting the rest of the run or shifting subsequent files' results onto
+    the wrong filename (regression test for the files[i]/loaded_files[i]
+    index correspondence once a load is skipped)."""
+    from llm_extract.api import extract_folder
+    from llm_extract.exceptions import SourceLoadingError
+    import tempfile
+    import shutil
+
+    temp_dir = Path(tempfile.mkdtemp())
+    try:
+        (temp_dir / "file1.txt").write_text("content 1")
+        (temp_dir / "file2.txt").write_text("content 2")
+        (temp_dir / "file3.txt").write_text("content 3")
+
+        def fake_load_source(path):
+            if path.name == "file2.txt":
+                raise SourceLoadingError("bad encoding")
+            return path.read_text()
+
+        def fake_batch(examples, **kwargs):
+            # file1 (examples[0]) succeeds; file3 (examples[1]) fails extraction
+            return ([MagicMock()], [examples[1]], [ValueError("boom")])
+
+        with patch("llm_extract.api.Extract") as mock_extract_cls:
+            mock_extractor = MagicMock()
+            mock_extractor.batch.side_effect = fake_batch
+            mock_extract_cls.return_value = mock_extractor
+
+            with patch("llm_extract.api.load_source", side_effect=fake_load_source):
+                with pytest.raises(RuntimeError) as exc_info:
+                    extract_folder(temp_dir, sample_attrs, ["txt"])
+
+        error_msg = str(exc_info.value)
+        assert "file2.txt: SourceLoadingError: bad encoding" in error_msg
+        assert "file3.txt: ValueError: boom" in error_msg
+        assert "file1.txt" not in error_msg
+    finally:
+        shutil.rmtree(temp_dir)
+
+
 def test_extract_folder_multimodal(sample_attrs) -> None:
     """Test that extract_folder() handles multimodal (PDFs) correctly."""
     from llm_extract.api import extract_folder
