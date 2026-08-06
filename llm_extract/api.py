@@ -8,6 +8,7 @@ from llm_extract.models import Attribute, ExtractionStage, MixedDocument
 from llm_extract.factory import build_extraction_signature
 from llm_extract.export import ExtractionResult
 from llm_extract.modules import Extract
+from llm_extract.exceptions import SourceLoadingError
 
 try:
     from openai import APITimeoutError
@@ -135,12 +136,18 @@ def extract_folder(
             continue
 
         # Load sources with progress
-        # Create examples in order (DSPy batch preserves order, so index[i] corresponds to files[i])
+        # Create examples in order (DSPy batch preserves order, so index[i] corresponds to loaded_files[i])
         examples = []
+        loaded_files = []
         for i, f in enumerate(files):
             if on_progress:
                 on_progress("loading_source", i, len(files))
-            source = load_source(f)
+            try:
+                source = load_source(f)
+            except SourceLoadingError as exc:
+                # Skip this file rather than aborting the whole folder run
+                all_failures.append((str(f.relative_to(folder_path)), exc))
+                continue
             if isinstance(source, MixedDocument):
                 source = source.pages
             examples.append(
@@ -148,6 +155,10 @@ def extract_folder(
                     "source", "with_reasoning"
                 )
             )
+            loaded_files.append(f)
+
+        if not examples:
+            continue
 
         # Batch processing (show progress bar only if on_progress callback is provided)
         # timeout=0 disables DSPy's straggler resubmission: it would otherwise resubmit
@@ -169,7 +180,7 @@ def extract_folder(
 
         for i, example in enumerate(examples):
             if i not in failed_indices:
-                f = files[i]
+                f = loaded_files[i]
                 all_results.append(
                     (
                         str(f.relative_to(folder_path).with_suffix("")),
@@ -179,7 +190,7 @@ def extract_folder(
                 successful_count += 1
             else:
                 # Track this failure
-                f = files[i]
+                f = loaded_files[i]
                 exc_idx = failed_examples.index(example)
                 all_failures.append(
                     (

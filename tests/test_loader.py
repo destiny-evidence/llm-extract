@@ -1,8 +1,9 @@
 import openpyxl
 import pytest
 from pathlib import Path
-from llm_extract.loader import load_csv, load_workbook
+from llm_extract.loader import load_csv, load_source, load_workbook
 from llm_extract.models import CSVData, WorkbookData
+from llm_extract.exceptions import SourceLoadingError
 
 
 def test_load_csv_valid(tmp_path: Path) -> None:
@@ -145,3 +146,35 @@ def test_load_workbook_accepts_string_path(tmp_path: Path) -> None:
     data1 = load_workbook(path)
     data2 = load_workbook(str(path))
     assert data1.sheets == data2.sheets
+
+
+# --- load_source ---
+
+
+def test_load_source_reads_utf8_text(tmp_path: Path) -> None:
+    path = tmp_path / "doc.txt"
+    path.write_text("Café — “smart quotes”", encoding="utf-8")
+    assert load_source(path) == "Café — “smart quotes”"
+
+
+def test_load_source_reads_cp1252_encoded_text(tmp_path: Path) -> None:
+    """Regression test: cp1252 bytes previously raised UnicodeDecodeError
+    when read with the platform default ('charmap' on Windows)."""
+    path = tmp_path / "doc.txt"
+    text = "Café — “smart quotes” and an ellipsis…"
+    path.write_bytes(text.encode("cp1252"))
+    assert load_source(path) == text
+
+
+def test_load_source_undetectable_bytes_falls_back_to_latin1(tmp_path: Path) -> None:
+    path = tmp_path / "doc.txt"
+    path.write_bytes(bytes(range(256)))
+    result = load_source(path)
+    assert isinstance(result, str)
+    assert len(result) == 256
+
+
+def test_load_source_missing_file_raises(tmp_path: Path) -> None:
+    path = tmp_path / "does_not_exist.txt"
+    with pytest.raises(SourceLoadingError, match=str(path)):
+        load_source(path)

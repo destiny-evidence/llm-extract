@@ -24,3 +24,7 @@ class CircularTypeReferenceError(Exception):
 
 class LoadingAttributesFromExcelError(Exception):
     """Raised when attributes cannot be loaded or parsed from an Excel workbook."""
+
+
+class SourceLoadingError(Exception):
+    """Raised when a source document cannot be read from disk."""
